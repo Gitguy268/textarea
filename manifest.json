@@ -1,0 +1,35 @@
+{
+  "name": "Textarea",
+  "short_name": "Textarea",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "description": "A minimalist text editor that lives in your browser. Open text and PDF files, export to any text format or a QR code, keep every note in your own document library, and lock a note in an AES-256 encrypted archive.",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "/",
+      "accept": {
+        "text/plain": [".txt", ".text", ".md", ".markdown", ".log"],
+        "text/markdown": [".md", ".markdown"],
+        "text/csv": [".csv", ".tsv"],
+        "application/json": [".json", ".jsonl"],
+        "text/html": [".html", ".htm"],
+        "text/xml": [".xml"],
+        "application/pdf": [".pdf"],
+        "application/zip": [".zip"]
+      }
+    }
+  ],
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  }
+}

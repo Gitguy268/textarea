@@ -1,0 +1,91 @@
+name: Feature request
+description: Suggest something the editor could do
+title: ''
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This project is small and stays small on purpose. A feature request is
+        more likely to land if it fits what the app already is, so it helps to say
+        what problem you are actually trying to solve rather than only the shape of
+        the fix you have in mind.
+
+        **Looking for existing notes?** They are stored per browser profile, not on
+        a server, so nobody else can see them and there is nothing to export. That
+        is a deliberate trade; use the Export panel to save a note to a file.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation, not the solution. What are you working on, and what is in your way?
+      placeholder: I want to put a note on my phone, and copy-pasting the link into a chat app is where I lose it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: What do you do now?
+      description: Including the workarounds, even the clumsy ones.
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like instead?
+      description: Optional. A sketch is fine.
+      render: markdown
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where it belongs
+      multiple: true
+      options:
+        - Opening files
+        - The document library
+        - Folder sync
+        - Exporting and copying
+        - QR codes
+        - Encryption
+        - Markdown and highlighting
+        - Themes and appearance
+        - Statistics
+        - Keyboard and menus
+        - Offline and installation
+        - Accessibility
+        - Documentation or tests
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What have you already looked at?
+      description: >
+        Upstream [antonmedv/textarea](https://github.com/antonmedv/textarea), the
+        issues here, or the notes in the README. If this already exists somewhere
+        and was removed on purpose, that is worth knowing before the discussion
+        starts.
+      render: markdown
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: A few things this project holds to
+      options:
+        - label: >
+            It has to work with no build step, as plain static files. A feature
+            needing a bundler will not be taken.
+        - label: >
+            Nothing may be fetched from a CDN at runtime. Any dependency has to
+            be vendored under vendor/, loaded on demand, with its licence.
+        - label: >
+            No note may leave the browser without me asking. That rules out
+            sync, accounts, sharing and anything server-shaped.

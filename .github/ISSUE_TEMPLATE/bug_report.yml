@@ -1,0 +1,93 @@
+name: Bug report
+description: Something does not work, or works differently from how it is described
+title: ''
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is a page that runs in your browser, so most bugs come down to a
+        particular browser doing a particular thing. The versions below are the
+        ones that matter.
+
+        **If this looks like a security problem, do not report it here.** Follow
+        [SECURITY.md](https://github.com/gitguy268/textarea/blob/main/SECURITY.md)
+        instead.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What did you do, what did you expect, and what did you get instead?
+      placeholder: I opened the Export panel, picked Copy to the clipboard and Markdown, and the clipboard still held the old text.
+    validations:
+      required: true
+
+  - type: textarea
+    id: note
+    attributes:
+      label: The note
+      description: >
+        If it is safe to share, paste the note. If it is not, describe its shape
+        instead — a few hundred words, or a PDF of a certain kind — because the
+        bug may depend on the content rather than the words.
+      render: markdown
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where it happens
+      multiple: true
+      options:
+        - Opening a file
+        - The document library
+        - Folder sync
+        - Exporting or copying
+        - The QR code
+        - Encrypted links
+        - Encrypted archives
+        - Themes or the statistics panel
+        - Markdown or syntax highlighting
+        - The menu or a dialog
+        - Somewhere else
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      description: The exact build, not just the name. "Firefox 145.0.2" rather than "Firefox".
+      placeholder: Firefox 145.0.2 on macOS
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How are you opening it
+      options:
+        - The web page
+        - Installed as an app
+        - Opened from a local file server
+        - A fork or my own deployment
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Anything in the browser console?
+      description: >
+        Open DevTools, reproduce it, and paste anything red. A warning about a
+        service worker or a clipboard permission is relevant; a stray log is not.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send this
+      options:
+        - label: I searched the open and closed issues for this.
+        - label: I tried a reload, because a stale service worker caches the previous shell.

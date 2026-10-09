@@ -1,0 +1,1968 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="description" content="A minimalist text editor that lives in your browser. Open text and PDF files, export to any text format or a QR code, keep every note in your own document library, mirror them into a folder you pick, and lock a note in an AES-256 encrypted archive. Nothing is uploaded.">
+<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="icon" href="favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" href="manifest.json">
+<!-- The LLM-readable overview of the site, per llmstxt.org. `describedby` is
+     the relation that proposal recommends, so an agent reading this page can
+     find the file that describes it. -->
+<link rel="describedby" href="llms.txt">
+<title>Textarea</title>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    color-scheme: light dark;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+
+    background-color: #fff;
+    --elevated: #fff;
+    --link: #0066cc;
+    --text: #161616;
+    --outline: #007aff;
+    --overlay: rgba(0, 0, 0, 0.04);
+    --danger: #d1242f;
+    --busy: #6e7781;
+
+    /* The reader's own note appearance, from the settings panel. These are
+       the defaults an untouched panel leaves in place; the panel writes
+       them as inline overrides on this element and takes them back off
+       again when the choice is cleared. */
+    --note-font: system-ui;
+    --note-size: 18px;
+    --note-leading: 1.5;
+
+    @media (prefers-color-scheme: dark) {
+      background-color: #000;
+      --elevated: #121212;
+      --link: #58a6ff;
+      --text: #fff;
+      --overlay: rgba(255, 255, 255, 0.06);
+      --danger: #ff7b72;
+      --busy: #8b949e;
+    }
+
+    /* An explicit choice from the menu. These come after the media query and
+       carry an attribute, so they win over whatever the system says. The & is
+       needed: this file nests, and a bare html selector inside the rule above
+       would mean a descendant of html. */
+    &[data-theme='light'] {
+      background-color: #fff;
+      --elevated: #fff;
+      --link: #0066cc;
+      --text: #161616;
+      --outline: #007aff;
+      --overlay: rgba(0, 0, 0, 0.04);
+      --danger: #d1242f;
+      --busy: #6e7781;
+    }
+
+    &[data-theme='dark'] {
+      background-color: #000;
+      --elevated: #121212;
+      --link: #58a6ff;
+      --text: #fff;
+      --outline: #007aff;
+      --overlay: rgba(255, 255, 255, 0.06);
+      --danger: #ff7b72;
+      --busy: #8b949e;
+    }
+  }
+
+  body {
+    color: var(--text);
+  }
+
+  a {
+    color: var(--link);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+    text-decoration-thickness: 1px;
+  }
+
+  article {
+    outline: none;
+    padding: 18px max(18px, calc(50vw - 400px));
+    width: 100%;
+    min-height: 100dvh;
+    font-family: var(--note-font);
+    font-size: var(--note-size);
+    line-height: var(--note-leading);
+    tab-size: 4;
+    white-space: pre-wrap;
+    text-wrap-style: stable;
+    overflow-wrap: break-word;
+  }
+
+  .md-h1,
+  .md-h2,
+  .md-h3,
+  .md-h4,
+  .md-h5,
+  .md-h6 {
+    font-weight: 700;
+  }
+
+  .md-h1 {
+    font-size: 2em;
+  }
+
+  .md-h2 {
+    font-size: 1.5em;
+  }
+
+  .md-h3 {
+    font-size: 1.25em;
+  }
+
+  .md-h4 {
+    font-size: 1.1em;
+  }
+
+  .md-h5 {
+    font-size: 1em;
+  }
+
+  .md-h6 {
+    font-size: 0.9em;
+  }
+
+  .md-code {
+    font-family: monospace;
+  }
+
+  .md-codeblock {
+    font-family: monospace;
+  }
+
+  .md-bold {
+    font-weight: bold;
+  }
+
+  .md-strike {
+    text-decoration: line-through;
+  }
+
+  .md-italic {
+    font-style: italic;
+  }
+
+  .md-url,
+  .md-file,
+  .md-wiki {
+    cursor: pointer;
+  }
+
+  /* Lists. The marker the reader typed stays in the text and is hidden, and the
+     bullet is drawn instead, because article.textContent has to keep returning
+     the note exactly as typed. A numbered item keeps its own marker: the number
+     is already there and there is nothing to renumber. */
+  .md-marker {
+    display: none;
+  }
+
+  .md-li::before {
+    content: '\2022';
+    color: var(--busy);
+    margin-right: 0.4em;
+  }
+
+  .md-li-2 {
+    margin-left: 1.5em;
+  }
+
+  .md-li-3 {
+    margin-left: 3em;
+  }
+
+  .md-li-4 {
+    margin-left: 4.5em;
+  }
+
+  .md-li-5 {
+    margin-left: 6em;
+  }
+
+  .md-li-6 {
+    margin-left: 7.5em;
+  }
+
+  /* Tasks. The bracket the reader typed stays in the text and is hidden,
+     and the checkbox is drawn instead - the same bargain the marker makes
+     with its bullet. The span is zero-sized so only the drawn box shows,
+     and the box is what the click lands on: it flips the one character
+     the task is made of. inline-block, so the drawn box is the span's
+     own box - a plain inline span with zero-sized text would have no box
+     at all to be clicked in. */
+  .md-task {
+    cursor: pointer;
+    display: inline-block;
+    font-size: 0;
+    vertical-align: middle;
+  }
+
+  .md-task::before {
+    content: '';
+    display: inline-block;
+    width: 0.95em;
+    height: 0.95em;
+    font-size: 14px;
+    border: 1.5px solid var(--busy);
+    border-radius: 3px;
+    text-align: center;
+    line-height: 1;
+    vertical-align: -0.15em;
+  }
+
+  .md-task:hover::before {
+    border-color: var(--text);
+  }
+
+  .md-task-done::before {
+    content: '\2713';
+    color: var(--busy);
+    font-weight: 700;
+  }
+
+  /* A line whose task is ticked dims: the box carries the state, and the
+     line says the task is behind the reader. */
+  .md-li:has(.md-task-done) {
+    opacity: 0.65;
+  }
+
+  #button {
+    -webkit-tap-highlight-color: transparent;
+    background-color: #0569fa;
+    border-radius: 50%;
+    border: none;
+    bottom: 15px;
+    box-shadow: 0 3px 5px -1px rgba(0, 0, 0, 0.2), 0 6px 10px 0 rgba(0, 0, 0, 0.14), 0 1px 18px 0 rgba(0, 0, 0, .12);
+    color: #fff;
+    cursor: pointer;
+    display: grid;
+    font-weight: 600;
+    width: 46px;
+    height: 46px;
+    outline: none;
+    overflow: hidden;
+    padding: 0;
+    place-items: center;
+    position: fixed;
+    right: 15px;
+    text-decoration: none;
+    touch-action: manipulation;
+    transition: background-color .3s ease-out;
+    user-select: none;
+    z-index: 1;
+  }
+
+  @media (hover) {
+    #button:hover {
+      color: #fff;
+      background-color: #3c86f3;
+      box-shadow: 0 5px 5px -3px rgba(0, 0, 0, 0.2), 0 8px 10px 1px rgba(0, 0, 0, 0.14), 0 3px 14px 2px rgba(0, 0, 0, .12);
+    }
+  }
+
+  #button:focus-visible {
+    outline: 2px solid var(--outline);
+    outline-offset: 2px;
+  }
+
+  span.ripple {
+    position: absolute;
+    border-radius: 50%;
+    transform: scale(0);
+    animation: ripple 600ms linear;
+    background-color: rgba(255, 255, 255, 0.7);
+  }
+
+  @keyframes ripple {
+    to {
+      transform: scale(4);
+      opacity: 0;
+    }
+  }
+
+  #menu {
+    visibility: hidden;
+    transform: scale(0.9) translateY(20px);
+    /* visibility is transitioned with no duration, so it flips the moment the
+       menu opens and 100ms after it closes. Folding it into `all` kept it
+       hidden for the length of the animation, which made every item refuse
+       focus while the menu was open and visible. */
+    transition:
+      opacity 100ms cubic-bezier(0.4, 0, 0.2, 1),
+      transform 100ms cubic-bezier(0.4, 0, 0.2, 1),
+      visibility 0s linear 100ms;
+    opacity: 0;
+    display: flex;
+    flex-direction: column;
+    /* Wide enough for "Two column PDFs: on" on one line, which it stopped being
+       at 216px once the menu grew a row. */
+    width: 244px;
+    max-height: min(70dvh, 470px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    position: fixed;
+    right: 16px;
+    bottom: 77px;
+    box-shadow: 0 19px 38px rgba(0, 0, 0, 0.10), 0 15px 12px rgba(0, 0, 0, 0.05);
+    background: var(--elevated);
+    backdrop-filter: blur(10px);
+    border-radius: 10px;
+    z-index: 2;
+  }
+
+  #menu.visible {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    visibility: visible;
+    transition:
+      opacity 100ms cubic-bezier(0.4, 0, 0.2, 1),
+      transform 100ms cubic-bezier(0.4, 0, 0.2, 1),
+      visibility 0s;
+  }
+
+  #menu .item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    text-decoration: none;
+    text-align: left;
+    padding: 10px 14px;
+    overflow: hidden;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    outline: none;
+    border: none;
+    touch-action: manipulation;
+    font: 16px / 1.5 system-ui;
+    color: var(--text);
+  }
+
+  #menu .item:hover {
+    background-color: var(--overlay);
+  }
+
+  #menu .item:focus-within {
+    outline: 2px solid var(--outline);
+  }
+
+  /* A set display on the item outranks the user agent's [hidden] rule, so an
+     entry hidden from script would still be drawn. Say so explicitly. */
+  #menu .item[hidden] {
+    display: none;
+  }
+
+  /* Menu entries that run script rather than navigate need the button reset. */
+  button.item {
+    background: none;
+    width: 100%;
+    font-family: inherit;
+  }
+
+  button.item[aria-checked='true']::after {
+    content: '✓';
+    margin-left: auto;
+    color: var(--link);
+    font-weight: 700;
+  }
+
+  .item-separator {
+    border: none;
+    border-top: 1px solid var(--overlay);
+    margin: 4px 10px;
+  }
+
+  #menu .item:first-child {
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+  }
+
+  #menu .item:last-child {
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+  }
+
+  #notification {
+    visibility: hidden;
+    transform: translateY(-30px);
+    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1) 0ms;
+    opacity: 0;
+
+    display: flex;
+    flex-direction: column;
+
+    position: fixed;
+    right: 17px;
+    top: 17px;
+
+    background: #5ad227;
+    color: #fff;
+    border-radius: 30px;
+    font: 18px / 1 system-ui;
+    font-weight: 600;
+    z-index: 2;
+    padding: 10px 20px;
+
+    max-width: min(90vw, 460px);
+    line-height: 1.4;
+    white-space: pre-line;
+  }
+
+  #notification.visible {
+    opacity: 1;
+    transform: translateY(0);
+    visibility: visible;
+  }
+
+  #notification.error {
+    background: var(--danger);
+  }
+
+  #notification.busy {
+    background: var(--busy);
+  }
+
+  /* The file input is a fallback for browsers without the file picker API; the
+     menu item and drag and drop are the primary routes. */
+  #file-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #drop-overlay {
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 120ms ease-out;
+
+    position: fixed;
+    inset: 12px;
+    z-index: 3;
+    pointer-events: none;
+
+    display: grid;
+    place-items: center;
+    border: 3px dashed var(--outline);
+    border-radius: 18px;
+    background: var(--elevated);
+    opacity: 0.92;
+  }
+
+  #drop-overlay.visible {
+    visibility: visible;
+    opacity: 1;
+  }
+
+  #drop-overlay span {
+    font: 600 20px / 1.4 system-ui;
+    color: var(--text);
+    padding: 24px;
+    text-align: center;
+  }
+
+  /* ------------------------------------------------------ the glass panels */
+
+  /* An opaque panel has nothing behind it for the effect to bend, so with the
+     Glass row on the menu, the dialogs and the statistics panel go translucent
+     and pick up a blur — which the vendored liquid-glass module then replaces
+     with the real refraction, its inline backdrop-filter winning over this
+     rule. When the row is off, or a reader has asked for reduced transparency,
+     the .glass class leaves the root and every rule here stops applying: the
+     panels are exactly the opaque boxes they were before this existed. */
+  html.glass #menu,
+  html.glass .dialog,
+  html.glass #stats-panel,
+  html.glass #backlinks-panel,
+  html.glass #tasks-panel,
+  html.glass #writing-panel {
+    background: color-mix(in srgb, var(--elevated) 75%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  /* ---------------------------------------------------------------- dialogs */
+
+  .dialog {
+    padding: 0;
+    border: none;
+    border-radius: 14px;
+    background: var(--elevated);
+    color: var(--text);
+    box-shadow: 0 19px 38px rgba(0, 0, 0, 0.2), 0 15px 12px rgba(0, 0, 0, 0.1);
+    max-width: min(92vw, 420px);
+    width: 100%;
+  }
+
+  .dialog::backdrop {
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(2px);
+  }
+
+  .dialog-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 20px;
+    margin: 0;
+  }
+
+  .dialog-title {
+    font: 700 20px / 1.3 system-ui;
+  }
+
+  .dialog-description,
+  .dialog-note,
+  .dialog-hint {
+    font: 15px / 1.45 system-ui;
+    opacity: 0.7;
+  }
+
+  .dialog-note {
+    opacity: 0.6;
+    font-size: 13px;
+  }
+
+  .dialog-hint {
+    font-size: 13px;
+    opacity: 0.55;
+  }
+
+  .dialog-error {
+    font: 15px / 1.4 system-ui;
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+
+  .dialog-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* A conditional field is hidden by removing it from the layout entirely. The
+     group sets `display: flex`, which outranks the user agent's [hidden] rule,
+     so a field answered "no" to `when` would otherwise stay on screen. */
+  .dialog-field[hidden] {
+    display: none;
+  }
+
+  .dialog-label {
+    font: 600 14px / 1.3 system-ui;
+    opacity: 0.8;
+  }
+
+  .dialog input[type='text'],
+  .dialog input[type='search'],
+  .dialog input[type='password'] {
+    font: 16px / 1.4 system-ui;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--text) 25%, transparent);
+    border-radius: 8px;
+    padding: 10px 12px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .dialog input[type='search']::placeholder {
+    color: var(--text);
+    opacity: 0.45;
+  }
+
+  .dialog input:disabled {
+    opacity: 0.5;
+  }
+
+  .dialog input:focus-visible {
+    outline: 2px solid var(--outline);
+    outline-offset: -1px;
+    border-color: transparent;
+  }
+
+  .dialog-reveal {
+    align-self: flex-end;
+    font: 600 13px / 1 system-ui;
+    color: var(--link);
+    background: none;
+    border: none;
+    padding: 4px 2px;
+    cursor: pointer;
+  }
+
+  .dialog-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .dialog-choices label,
+  .dialog-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font: 16px / 1.4 system-ui;
+    padding: 6px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .dialog-choices label:hover,
+  .dialog-check:hover {
+    background: var(--overlay);
+  }
+
+  .dialog input[type='radio'],
+  .dialog input[type='checkbox'] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--outline);
+    flex: none;
+    margin: 0;
+  }
+
+  /* An icon in a choice row is decoration next to a label that already names it,
+     so it is held back rather than competing with the text. */
+  .dialog-choices label svg,
+  .dialog-check svg {
+    flex: none;
+    opacity: 0.7;
+  }
+
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 2px;
+  }
+
+  .dialog-button {
+    font: 600 15px / 1 system-ui;
+    color: var(--text);
+    background: var(--overlay);
+    border: none;
+    border-radius: 999px;
+    padding: 10px 18px;
+    cursor: pointer;
+  }
+
+  .dialog-button-primary {
+    background: #0569fa;
+    color: #fff;
+  }
+
+  .dialog-button-danger {
+    background: var(--danger);
+    color: #fff;
+  }
+
+  .dialog-button:focus-visible {
+    outline: 2px solid var(--outline);
+    outline-offset: 2px;
+  }
+
+  /* A disabled action still has to read as unavailable. Without this a
+     button that cannot be pressed looks like the one to press. */
+  .dialog-button:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  /* ------------------------------------------------------- the export panels */
+
+  /* The QR panel is narrower than a form dialog because the only thing in it is
+     a square and three buttons. It still has to be wide enough for the three
+     buttons to sit on one line each, so it is not much narrower. */
+  .dialog-qr {
+    max-width: min(94vw, 400px);
+  }
+
+  /* Three buttons, one of them two words long. */
+  .dialog-encryption {
+    max-width: min(94vw, 470px);
+  }
+
+  /* Two radio lists in one dialog. Nine formats are taller than a phone, so one
+     list has to scroll, and it must not be the whole form: scrolling the form
+     puts Cancel and Save below the fold, which is where a primary action has no
+     business being. The dialog is a column, the format list takes the slack and
+     scrolls on its own, and the buttons stay where they are. */
+  .dialog-scroll {
+    max-height: min(84dvh, 640px);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dialog-scroll .dialog-form {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .dialog-scroll .dialog-field-grow {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .dialog-scroll .dialog-field-grow .dialog-choices {
+    max-height: none;
+    overflow-y: auto;
+  }
+
+  .dialog-scroll .dialog-actions {
+    flex: none;
+  }
+
+  /* The settings panel carries two sections and a row of controls, so it
+     scrolls its own box rather than the page: taller than a phone, but the
+     Close button stays reachable at the end of the form. */
+  .dialog-settings {
+    max-height: min(84dvh, 640px);
+    overflow-y: auto;
+  }
+
+  .settings-heading {
+    margin: 0;
+    font: 600 15px / 1.4 system-ui;
+    opacity: 0.7;
+  }
+
+  .settings-features,
+  .settings-appearance {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* A feature's behaviour hangs off its switch, ruled off to the side so
+     the indent reads as "under this" rather than as a new section. The
+     [hidden] half is not optional: an author display on the element beats
+     the UA's display:none for the attribute, so the box would stay on
+     screen behind the switch it belongs to. */
+  .feature-options {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-left: 9px;
+    padding-left: 17px;
+    border-left: 2px solid var(--overlay);
+  }
+
+  .feature-options[hidden] {
+    display: none;
+  }
+
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font: 15px / 1.4 system-ui;
+    padding: 2px 0;
+  }
+
+  .settings-row > label {
+    cursor: pointer;
+  }
+
+  .settings-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .settings-controls input[type='color'] {
+    width: 44px;
+    height: 26px;
+    padding: 2px;
+    border: 1px solid var(--busy);
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+  }
+
+  .settings-controls select {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 1px solid var(--busy);
+    border-radius: 6px;
+    padding: 3px 6px;
+    max-width: 40vw;
+  }
+
+  /* A sentence, not a value: wider than a select but still bounded, so a
+     long instruction wraps the row instead of pushing the label away. */
+  .settings-controls input[type='text'] {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 1px solid var(--busy);
+    border-radius: 6px;
+    padding: 3px 6px;
+    width: min(46vw, 260px);
+    min-width: 0;
+  }
+
+  .settings-controls input[type='range'] {
+    width: min(40vw, 180px);
+    accent-color: var(--outline);
+    margin: 0;
+  }
+
+  .settings-value {
+    min-width: 5ch;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.8;
+  }
+
+  /* The custom-fonts shelf: a file input dressed like the other controls,
+     a link field that gives up the width the sentence fields take because
+     the Import button shares its row, and the buttons themselves small
+     enough to sit at the end of a row without turning it into a dialog of
+     their own. */
+  .settings-controls input[type='file'] {
+    font: inherit;
+    color: inherit;
+    max-width: min(52vw, 280px);
+  }
+
+  .settings-controls input[type='file']::file-selector-button {
+    font: inherit;
+    color: inherit;
+    background: var(--overlay);
+    border: none;
+    border-radius: 6px;
+    padding: 4px 10px;
+    margin-right: 8px;
+    cursor: pointer;
+  }
+
+  .settings-controls input.settings-font-url {
+    width: min(38vw, 200px);
+  }
+
+  .settings-font-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .settings-font-action {
+    font: 500 13px / 1 system-ui;
+    padding: 5px 12px;
+  }
+
+  /* The white card behind the symbol is not decoration: a scanner needs a light
+     quiet zone, and on the dark theme the page background would invert the whole
+     code. The border is only there to show where the symbol ends. */
+  .qr-figure {
+    display: grid;
+    place-items: center;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid var(--overlay);
+    border-radius: 10px;
+    min-height: 120px;
+  }
+
+  .qr-figure svg {
+    display: block;
+    width: min(240px, 56vw);
+    height: auto;
+  }
+
+  /* A note too long for a symbol leaves the figure empty. The dialog says why in
+     full just above it, so this only has to stop a white box looking like a
+     broken image. */
+  .qr-figure:empty::after {
+    content: 'No symbol';
+    font: 600 15px / 1.4 system-ui;
+    color: #666;
+    text-align: center;
+    padding: 40px 12px;
+  }
+
+  /* ------------------------------------------------------ the document list */
+
+  /* A board of sticky notes rather than a list of rows. The panel's job is to
+     let someone recognise a note at a glance, and one line of text per note
+     does not give them enough to recognise: the face of each card is the
+     note's own yellow square, with the title where the eye lands and the date
+     in the corner. Three across on a laptop, fewer as the dialog narrows. */
+  .dialog-library {
+    max-width: min(94vw, 560px);
+  }
+
+  .document-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 14px;
+    max-height: min(56dvh, 460px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* The frame around the note. It is also where the "this one is open" ring
+     lives, drawn inside the card because a scrolling list clips anything that
+     hangs outside it. */
+  .document-row {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    padding: 7px;
+    border: 1px solid color-mix(in srgb, var(--text) 20%, transparent);
+    border-radius: 16px;
+    background: var(--elevated);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .document-row:hover {
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
+  }
+
+  /* The note on screen, marked rather than highlighted: a tinted card in a
+     grid is easy to read as "selected", which it is not. */
+  .document-row[data-current='true'] {
+    border-color: var(--outline);
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--outline) 50%, transparent);
+  }
+
+  .document-row[data-current='true']::after {
+    content: 'open';
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    font: 700 10px / 1 system-ui;
+    letter-spacing: 0.06em;
+    color: #fff;
+    background: var(--outline);
+    border-radius: 999px;
+    padding: 4px 7px;
+    pointer-events: none;
+  }
+
+  /* The note itself, and the whole of it, is the button. Yellow paper with
+     dark ink in both themes: that is what the paper looks like, so it does not
+     follow the theme. */
+  .document-open {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 7px;
+    text-align: center;
+    background: #fbe28c;
+    border: none;
+    border-radius: 10px;
+    /* The top of the paper is spoken for by the delete button in its corner
+       and the bottom by the date, so the text starts below and stops above
+       them. The card is square, which is only enough room for a couple of
+       lines of each: both are clamped, and the full note is one click away. */
+    padding: 40px 12px 24px;
+    cursor: pointer;
+    color: #1c1c1c;
+    font-family: inherit;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+
+  .document-open:hover {
+    background: #fde8a2;
+  }
+
+  .document-open:focus-visible {
+    outline: 2px solid var(--outline);
+    outline-offset: -4px;
+  }
+
+  .document-title {
+    font: 600 15px / 1.35 system-ui;
+    color: inherit;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+
+  .document-preview {
+    font: 13px / 1.4 system-ui;
+    color: rgba(0, 0, 0, 0.62);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+
+  /* The date sits in the corner where a sticky note has room for it. The word
+     count leaves the face of the card, because a row of numbers is what makes
+     a card hard to scan; it stays in the button's accessible name. */
+  .document-open .document-meta {
+    position: absolute;
+    right: 10px;
+    bottom: 8px;
+    font: 11px / 1.3 system-ui;
+    color: rgba(0, 0, 0, 0.55);
+    opacity: 1;
+  }
+
+  .document-meta {
+    font: 13px / 1.3 system-ui;
+    opacity: 0.6;
+  }
+
+  /* The delete control is on the paper rather than beside the card, so there
+     is one thing to aim at instead of a second row of furniture. It is dark on
+     the yellow for the same reason the text is: the paper is yellow either
+     way, and a themed icon on it would disappear in one of the two themes. */
+  .document-delete {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.07);
+    border: none;
+    border-radius: 999px;
+    color: #1c1c1c;
+    cursor: pointer;
+    opacity: 0.45;
+    touch-action: manipulation;
+  }
+
+  .document-delete:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.16);
+  }
+
+  .document-delete:focus-visible {
+    outline: 2px solid var(--outline);
+    outline-offset: 2px;
+  }
+
+  .document-delete:disabled {
+    opacity: 0.25;
+    cursor: default;
+  }
+
+  .stats-close,
+  .backlinks-close,
+  .writing-close,
+  .tasks-close {
+    flex: none;
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    align-self: center;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    color: var(--text);
+    cursor: pointer;
+    opacity: 0.55;
+    touch-action: manipulation;
+  }
+
+  .stats-close:hover,
+  .backlinks-close:hover,
+  .writing-close:hover,
+  .tasks-close:hover {
+    opacity: 1;
+    background: var(--overlay);
+  }
+
+  .stats-close:focus-visible,
+  .backlinks-close:focus-visible,
+  .writing-close:focus-visible,
+  .tasks-close:focus-visible {
+    outline: 2px solid var(--outline);
+    outline-offset: -2px;
+  }
+
+  /* An empty state is a card with nothing written on it: it keeps the frame
+     across the whole board and drops the paper, and the dashed edge says there
+     is nothing here yet rather than that something failed to load. */
+  .document-row-empty {
+    grid-column: 1 / -1;
+    display: block;
+    padding: 26px 16px;
+    text-align: center;
+    border-style: dashed;
+    box-shadow: none;
+  }
+
+  .document-row-empty:hover {
+    box-shadow: none;
+  }
+
+  .document-row-empty .document-title {
+    display: block;
+    white-space: normal;
+    color: var(--text);
+  }
+
+  .document-row-empty .document-meta {
+    color: var(--text);
+  }
+
+  /* ------------------------------------------------------ the statistics panel */
+
+  /* Bottom left, because the menu button owns the bottom right corner and a
+     readout in the same place would sit under it. */
+  #stats-panel {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 1;
+    width: min(320px, calc(100vw - 32px));
+    padding: 10px 16px 12px;
+    background: var(--elevated);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
+    color: var(--text);
+  }
+
+  /* A heading of its own, so the close button has somewhere to sit that is not
+     on top of the first row of numbers. */
+  .stats-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .stats-title {
+    font: 600 15px / 1.3 system-ui;
+    opacity: 0.75;
+  }
+
+  .stats-list {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 3px 16px;
+    margin: 0;
+  }
+
+  .stats-list dt {
+    font: 15px / 1.5 system-ui;
+    opacity: 0.7;
+  }
+
+  .stats-list dd {
+    margin: 0;
+    text-align: right;
+    font: 600 15px / 1.5 system-ui;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stats-hint {
+    margin: 10px 0 0;
+    padding-top: 9px;
+    border-top: 1px solid var(--overlay);
+    font: 12px / 1.45 system-ui;
+    opacity: 0.55;
+  }
+
+  /* ------------------------------------------------------ the backlinks panel */
+
+  /* Top left: the statistics panel has the bottom left, the menu button the
+     bottom right, and the notification takes the top right. It scrolls rather
+     than growing over the note - a popular title can have fifty links. */
+  #backlinks-panel {
+    position: fixed;
+    left: 16px;
+    top: 16px;
+    z-index: 1;
+    width: min(340px, calc(100vw - 32px));
+    max-height: min(50dvh, 420px);
+    overflow-y: auto;
+    padding: 10px 16px 12px;
+    background: var(--elevated);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
+    color: var(--text);
+  }
+
+  .backlinks-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .backlinks-title {
+    font: 600 15px / 1.3 system-ui;
+    opacity: 0.75;
+  }
+
+  .backlinks-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .backlink-open {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 8px;
+    width: 100%;
+    text-align: left;
+    font: 15px / 1.4 system-ui;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 8px;
+    color: var(--text);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .backlink-open:hover {
+    background: var(--overlay);
+  }
+
+  .backlink-open:focus-visible {
+    outline: 2px solid var(--outline);
+    outline-offset: -2px;
+  }
+
+  .backlink-name {
+    font-weight: 600;
+  }
+
+  .backlink-kind {
+    font: 12px / 1.4 system-ui;
+    opacity: 0.6;
+    border: 1px solid var(--overlay);
+    border-radius: 999px;
+    padding: 0 6px;
+  }
+
+  .backlink-snippet {
+    flex-basis: 100%;
+    font: 13px / 1.4 system-ui;
+    opacity: 0.65;
+    overflow-wrap: anywhere;
+  }
+
+  .backlinks-empty {
+    margin: 0;
+    font: 14px / 1.45 system-ui;
+    opacity: 0.6;
+  }
+
+  /* The tasks panel sits with the backlinks panel, top left: they answer the
+     same neighbourhood of question - other notes - and only one of them is
+     usually up at a time. z-index puts whichever was opened last on top when
+     both are. */
+  #tasks-panel {
+    position: fixed;
+    left: 16px;
+    top: 16px;
+    z-index: 2;
+    width: min(360px, calc(100vw - 32px));
+    max-height: min(60dvh, 480px);
+    overflow-y: auto;
+    padding: 10px 16px 12px;
+    background: var(--elevated);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
+    color: var(--text);
+  }
+
+  .tasks-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .tasks-title {
+    font: 600 15px / 1.3 system-ui;
+    opacity: 0.75;
+  }
+
+  .tasks-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .task-open {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 8px;
+    width: 100%;
+    text-align: left;
+    font: 15px / 1.4 system-ui;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 8px;
+    color: var(--text);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .task-open:hover {
+    background: var(--overlay);
+  }
+
+  .task-open:focus-visible {
+    outline: 2px solid var(--outline);
+    outline-offset: -2px;
+  }
+
+  .task-name {
+    font-weight: 600;
+  }
+
+  .task-text {
+    flex-basis: 100%;
+    font: 13px / 1.4 system-ui;
+    opacity: 0.75;
+    overflow-wrap: anywhere;
+  }
+
+  /* A row for a task already ticked reads as finished: struck through and
+     dimmed, there because the reader asked for it with the option. */
+  .task-row-done .task-name,
+  .task-row-done .task-text {
+    text-decoration: line-through;
+    opacity: 0.55;
+  }
+
+  .tasks-empty {
+    margin: 0;
+    font: 14px / 1.45 system-ui;
+    opacity: 0.6;
+  }
+
+  /* ------------------------------------------------------- the quick switcher */
+
+  /* A palette rather than a form: wider than the dialogs the app draws for
+     questions, and sat high on the screen rather than centred, because the
+     reader's eye is already on the note when the shortcut lands. The UA's
+     auto margins stay in place for the sides and the bottom. */
+  .dialog-switcher {
+    max-width: min(92vw, 560px);
+    margin-top: 12vh;
+  }
+
+  .switcher-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .switcher-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: min(50dvh, 380px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .switcher-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  /* The row the arrow keys are on, marked with the same tint the menu rows
+     use for a chosen answer. */
+  .switcher-item[aria-selected='true'] {
+    background: var(--overlay);
+  }
+
+  .switcher-name {
+    font: 600 15px / 1.35 system-ui;
+  }
+
+  .switcher-hint {
+    font: 13px / 1.4 system-ui;
+    opacity: 0.6;
+    overflow-wrap: anywhere;
+  }
+
+  .switcher-empty {
+    margin: 0;
+    font: 14px / 1.45 system-ui;
+    opacity: 0.6;
+  }
+
+  /* ------------------------------------------------ find and replace */
+
+  /* Same high placement as the palette: Ctrl+F lands while the reader's
+     eye is already on the note. The two rows are one shape - a field that
+     takes what room is left, and the small buttons that act on it. */
+  .dialog-find {
+    max-width: min(92vw, 560px);
+    margin-top: 12vh;
+  }
+
+  .find-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px;
+  }
+
+  .find-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .find-row input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 1px solid var(--busy);
+    border-radius: 6px;
+    padding: 4px 8px;
+  }
+
+  .find-count {
+    min-width: 8ch;
+    text-align: right;
+    font: 13px / 1.35 system-ui;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.7;
+  }
+
+  .find-action {
+    font: 500 13px / 1 system-ui;
+    padding: 5px 12px;
+  }
+
+  .find-options {
+    display: flex;
+    gap: 16px;
+    font: 13px / 1.35 system-ui;
+  }
+
+  .find-options label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+
+  /* -------------------------------------------------- the writing tools */
+
+  /* Top right, but below the notification pill: #notification owns the
+     corner at top:17px and a save would otherwise land on this panel's
+     title every few seconds. z-index matches the other panels, so a tall
+     notification still floats over it while it is on screen. */
+  #writing-panel {
+    position: fixed;
+    right: 16px;
+    top: 68px;
+    z-index: 1;
+    width: min(340px, calc(100vw - 32px));
+    max-height: min(74dvh, 560px);
+    overflow-y: auto;
+    padding: 10px 16px 12px;
+    background: var(--elevated);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
+    color: var(--text);
+  }
+
+  .writing-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .writing-title {
+    font: 600 15px / 1.3 system-ui;
+    opacity: 0.75;
+  }
+
+  .writing-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .writing-tool {
+    font: 13px / 1.3 system-ui;
+    color: inherit;
+    background: none;
+    border: 1px solid color-mix(in srgb, var(--text) 28%, transparent);
+    border-radius: 999px;
+    padding: 4px 10px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .writing-tool[aria-pressed='true'] {
+    background: var(--overlay);
+    border-color: var(--outline);
+    font-weight: 600;
+  }
+
+  .writing-tool:hover {
+    background: var(--overlay);
+  }
+
+  .writing-tool:focus-visible {
+    outline: 2px solid var(--outline);
+    outline-offset: 2px;
+  }
+
+  /* The reader's extra instructions, shown before the run so nothing is
+     applied to a note without its say being visible. */
+  .writing-extra {
+    margin: 0 0 10px;
+    font: 13px / 1.4 system-ui;
+    opacity: 0.65;
+    overflow-wrap: anywhere;
+  }
+
+  /* Reserved even when empty: the status line turns from blank to "Writing…"
+     to an error without shoving the result box around. */
+  .writing-status {
+    min-height: 1.4em;
+    margin: 0 0 8px;
+    font: 13px / 1.4 system-ui;
+    opacity: 0.7;
+    overflow-wrap: anywhere;
+  }
+
+  .writing-status.error {
+    color: var(--danger);
+    opacity: 1;
+  }
+
+  .writing-run {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+
+  /* No display rule of its own, deliberately: the panel toggles `hidden`,
+     and an author display would beat the attribute the way the settings
+     rows had to be taught not to. */
+  .writing-output {
+    margin: 0 0 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--overlay);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--text) 4%, transparent);
+    font: 14px / 1.55 system-ui;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: min(40dvh, 300px);
+    overflow-y: auto;
+  }
+
+  .writing-replace {
+    width: 100%;
+  }
+
+  @media print {
+    .noprint {
+      visibility: hidden !important;
+    }
+  }
+</style>
+<!-- role=textbox with aria-multiline is the correct mapping for a
+     contenteditable element, and it needs a name to be announced at all. -->
+<article contenteditable="plaintext-only" spellcheck autofocus role="textbox"
+         aria-multiline="true" aria-label="Note"></article>
+<button id="button" class="noprint" aria-label="Menu" aria-haspopup="menu"
+        aria-expanded="false">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor"
+       stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="1"></circle>
+    <circle cx="12" cy="5" r="1"></circle>
+    <circle cx="12" cy="19" r="1"></circle>
+  </svg>
+</button>
+<div id="menu" class="noprint" role="menu">
+  <a class="item" href="#new" target="_blank" rel="noopener noreferrer" role="menuitem">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-plus"></use>
+    </svg>
+    New
+  </a>
+  <button id="menu-open" class="item" type="button" role="menuitem">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-folder"></use>
+    </svg>
+    Open file
+  </button>
+  <button id="menu-filelinks" class="item" type="button" role="menuitemcheckbox"
+          aria-checked="true">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-copy"></use>
+    </svg>
+    <span id="menu-filelinks-label">File links: on</span>
+  </button>
+  <button id="menu-filelink" class="item" type="button" role="menuitem">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-save"></use>
+    </svg>
+    Link a local file
+  </button>
+  <a id="menu-share" class="item" href="" role="menuitem">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-share"></use>
+    </svg>
+    <span id="menu-share-label">Share link</span>
+  </a>
+  <hr class="item-separator noprint">
+  <button id="menu-export" class="item" type="button" role="menuitem">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-download"></use>
+    </svg>
+    Export
+  </button>
+  <button id="menu-documents" class="item" type="button" role="menuitem">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-list"></use>
+    </svg>
+    <span id="menu-documents-label">My documents</span>
+  </button>
+  <button id="menu-backup" class="item" type="button" role="menuitem">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-download"></use>
+    </svg>
+    Backup
+  </button>
+  <button id="menu-trash" class="item" type="button" role="menuitem">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-delete"></use>
+    </svg>
+    Trash
+  </button>
+  <button id="menu-folder" class="item" type="button" role="menuitem" hidden>
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-sync"></use>
+    </svg>
+    <span id="menu-folder-label">Folder sync</span>
+  </button>
+  <button id="menu-sync" class="item" type="button" role="menuitem" hidden>
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-sync"></use>
+    </svg>
+    <span id="menu-sync-label">Sync now</span>
+  </button>
+  <button id="menu-encryption" class="item" type="button" role="menuitem">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-lock"></use>
+    </svg>
+    <span id="menu-encryption-label">Encryption</span>
+  </button>
+  <button id="menu-stats" class="item" type="button" role="menuitemcheckbox" aria-checked="false">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-info"></use>
+    </svg>
+    <span id="menu-stats-label">Statistics</span>
+  </button>
+  <button id="menu-backlinks" class="item" type="button" role="menuitemcheckbox" aria-checked="false">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-backlinks"></use>
+    </svg>
+    <span id="menu-backlinks-label">Backlinks</span>
+  </button>
+  <button id="menu-tasks" class="item" type="button" role="menuitem" hidden>
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-task"></use>
+    </svg>
+    Tasks
+  </button>
+  <button id="menu-writing" class="item" type="button" role="menuitemcheckbox" aria-checked="false">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-writing"></use>
+    </svg>
+    <span id="menu-writing-label">Writing tools</span>
+  </button>
+  <button id="menu-theme" class="item" type="button" role="menuitem">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-theme"></use>
+    </svg>
+    <span id="menu-theme-label">Theme: system</span>
+  </button>
+  <button id="menu-glass" class="item" type="button" role="menuitemcheckbox" aria-checked="true">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-water-drop"></use>
+    </svg>
+    <span id="menu-glass-label">Glass: on</span>
+  </button>
+  <button id="menu-columns" class="item" type="button" role="menuitemcheckbox" aria-checked="true">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-columns"></use>
+    </svg>
+    <span id="menu-columns-label">Two column PDFs: on</span>
+  </button>
+  <button id="menu-settings" class="item" type="button" role="menuitem">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-settings"></use>
+    </svg>
+    Settings
+  </button>
+  <hr class="item-separator noprint">
+  <a class="item" href="https://github.com/gitguy268/textarea" target="_blank" rel="noopener noreferrer" role="menuitem">
+    <svg aria-hidden="true" focusable="false" width="22" height="22">
+      <use xlink:href="#icon-github"></use>
+    </svg>
+    GitHub
+  </a>
+</div>
+<div id="drop-overlay" class="noprint" aria-hidden="true">
+  <span>Drop to open<br><small>Text, PDF, ZIP</small></span>
+</div>
+<input id="file-input" type="file" class="noprint" aria-hidden="true" tabindex="-1"
+       accept="text/*,.txt,.md,.markdown,.csv,.json,.yaml,.yml,.xml,.html,.log,.pdf,.zip,application/pdf,application/zip">
+<!-- notify() switches aria-live to assertive before writing an error, so a
+     failure is announced rather than politely queued. -->
+<div id="notification" class="noprint" role="status" aria-live="polite"></div>
+<script type="module" src="app.js"></script>
+<svg style="display: none" aria-hidden="true" focusable="false">
+  <symbol id="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"
+          class="icon icon-tabler icons-tabler-outline icon-tabler-plus">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M12 5l0 14"/>
+    <path d="M5 12l14 0"/>
+  </symbol>
+  <symbol id="icon-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"
+          stroke-linecap="round"
+          stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1"/>
+    <path d="M12 14v-11"/>
+    <path d="M9 6l3 -3l3 3"/>
+  </symbol>
+  <symbol id="icon-github" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path
+      d="M9 19c-4.3 1.4 -4.3 -2.5 -6 -3m12 5v-3.5c0 -1 .1 -1.4 -.5 -2c2.8 -.3 5.5 -1.4 5.5 -6a4.6 4.6 0 0 0 -1.3 -3.2a4.2 4.2 0 0 0 -.1 -3.2s-1.1 -.3 -3.5 1.3a12.3 12.3 0 0 0 -6.2 0c-2.4 -1.6 -3.5 -1.3 -3.5 -1.3a4.2 4.2 0 0 0 -.1 3.2a4.6 4.6 0 0 0 -1.3 3.2c0 4.6 2.7 5.7 5.5 6c-.6 .6 -.6 1.2 -.5 2v3.5"/>
+  </symbol>
+  <symbol id="icon-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M3 7a2 2 0 0 1 2 -2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z"/>
+  </symbol>
+  <!-- Two arrows around nothing: the folder mirror. Drawn here rather than
+       copied, so it matches the 1.25-stroke group the menu icons sit in. -->
+  <symbol id="icon-sync" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M3 9h13l-3-3M16 9l-3 3M21 15H8l3-3M8 15l3 3"/>
+  </symbol>
+  <symbol id="icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M7 10v-2a5 5 0 0 1 10 0v2"/>
+    <rect x="5" y="10" width="14" height="10" rx="2"/>
+    <path d="M12 14v2"/>
+  </symbol>
+  <symbol id="icon-unlock" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M7 10v-2a5 5 0 0 1 9.6 -2"/>
+    <rect x="5" y="10" width="14" height="10" rx="2"/>
+    <path d="M12 14v2"/>
+  </symbol>
+  <symbol id="icon-theme" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18"/>
+    <path d="M12 3v18a9 9 0 0 0 0-18" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="icon-columns" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M4 4h16v16h-16z"/>
+    <path d="M12 4v16"/>
+  </symbol>
+
+  <symbol id="icon-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </symbol>
+
+  <!-- Two links of one chain, with the join between them: the panel this row
+       opens shows the notes whose chains reach the one on screen. -->
+  <symbol id="icon-backlinks" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M9 15l6 -6"/>
+    <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.53 .536"/>
+    <path d="M13 18l-.463 .536a5 5 0 0 1 -7.071 -7.072l.53 -.536"/>
+  </symbol>
+
+  <symbol id="icon-writing" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/>
+    <path d="M13.5 6.5l4 4"/>
+  </symbol>
+
+  <symbol id="icon-task" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <rect x="4" y="4" width="16" height="16" rx="2"/>
+    <path d="M9 12l2 2l4 -4"/>
+  </symbol>
+
+  <symbol id="icon-zip" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M4 4h6v3h-3v3h3v3h-3v3h3v3h-6z"/>
+    <path d="M14 4h6v16h-6"/>
+    <path d="M17 8v2.5a1.5 1.5 0 0 0 3 0v-2.5"/>
+    <path d="M17 17h3"/>
+  </symbol>
+
+  <!-- The menu icons below come from the tabler-outline set, matching the ten
+       above them. The stroke width is the page's 1.25 rather than the 1.5 they
+       were drawn at, so one menu does not carry two weights. -->
+
+  <symbol id="icon-download" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/>
+    <path d="M7 11l5 5l5 -5"/>
+    <path d="M12 4l0 12"/>
+  </symbol>
+
+  <symbol id="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M8 8m0 2a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z"/>
+    <path d="M16 8v-2a2 2 0 0 0 -2 -2h-8a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h2"/>
+  </symbol>
+
+  <symbol id="icon-list" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M9 6l11 0"/>
+    <path d="M9 12l11 0"/>
+    <path d="M9 18l11 0"/>
+    <path d="M5 6l0 .01"/>
+    <path d="M5 12l0 .01"/>
+    <path d="M5 18l0 .01"/>
+  </symbol>
+
+  <symbol id="icon-info" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/>
+    <path d="M12 9h.01"/>
+    <path d="M11 12h1v4h1"/>
+  </symbol>
+
+  <!-- The floppy, carried over from the icon set this fork started from. It
+       belongs to the tabler group above, so it takes that group's 24-unit box
+       and 1.25 stroke rather than the 960-unit one below. -->
+  <symbol id="icon-save" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+    <path d="M6 4h10l4 4v12a1 1 0 0 1 -1 1h-14a1 1 0 0 1 -1 -1v-15a1 1 0 0 1 1 -1"/>
+    <path d="M12 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>
+    <path d="M9 4l0 5l6 0l0 -5"/>
+  </symbol>
+
+  <!-- The next four are Google's Material Symbols rather than tabler, because
+       the tabler set has no close or delete, because the QR code is wanted
+       from that family specifically, and because the drop that marks the Glass
+       row exists only in Google's set.
+
+       Each path below is copied verbatim from Google's repository, in Google's
+       own 960-unit coordinate space, and each symbol keeps Google's own viewBox
+       rather than the 24-unit one the tabler symbols above use. Nothing has been
+       rescaled or transcribed by hand: the QR code's three finder patterns sit
+       where Google draws them, and the trash can's lid is at the top. A hand
+       rescale had mirrored both, and no test was looking.
+
+       One file each, in github.com/google/material-design-icons (Apache-2.0):
+         symbols/web/qr_code/materialsymbolsoutlined/qr_code_24px.svg
+         symbols/web/close/materialsymbolsoutlined/close_24px.svg
+         symbols/web/delete/materialsymbolsoutlined/delete_24px.svg
+         symbols/web/water_drop/materialsymbolsoutlined/water_drop_24px.svg -->
+
+  <symbol id="icon-qr" viewBox="0 -960 960 960" fill="currentColor" stroke="none"
+          class="icon icon-material-symbols icons-material-symbols-outlined icon-qr-code">
+    <path d="M120-520v-320h320v320H120Zm80-80h160v-160H200v160Zm-80 480v-320h320v320H120Zm80-80h160v-160H200v160Zm320-320v-320h320v320H520Zm80-80h160v-160H600v160Zm160 480v-80h80v80h-80ZM520-360v-80h80v80h-80Zm80 80v-80h80v80h-80Zm-80 80v-80h80v80h-80Zm80 80v-80h80v80h-80Zm80-80v-80h80v80h-80Zm0-160v-80h80v80h-80Zm80 80v-80h80v80h-80Z"/>
+  </symbol>
+
+  <symbol id="icon-close" viewBox="0 -960 960 960" fill="currentColor" stroke="none"
+          class="icon icon-material-symbols icons-material-symbols-outlined icon-close">
+    <path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/>
+  </symbol>
+
+  <symbol id="icon-delete" viewBox="0 -960 960 960" fill="currentColor" stroke="none"
+          class="icon icon-material-symbols icons-material-symbols-outlined icon-delete">
+    <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/>
+  </symbol>
+
+  <symbol id="icon-water-drop" viewBox="0 -960 960 960" fill="currentColor" stroke="none"
+          class="icon icon-material-symbols icons-material-symbols-outlined icon-water-drop">
+    <path d="M491-200q12-1 20.5-9.5T520-230q0-14-9-22.5t-23-7.5q-41 3-87-22.5T343-375q-2-11-10.5-18t-19.5-7q-14 0-23 10.5t-6 24.5q17 91 80 130t127 35ZM480-80q-137 0-228.5-94T160-408q0-100 79.5-217.5T480-880q161 137 240.5 254.5T800-408q0 140-91.5 234T480-80Zm0-80q104 0 172-70.5T720-408q0-73-60.5-165T480-774Q361-665 300.5-573T240-408q0 107 68 177.5T480-160Zm0-320Z"/>
+  </symbol>
+</svg>

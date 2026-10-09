@@ -1,0 +1,43 @@
+# The dependencies are development-only: the linter and the test browser.
+# Dependabot is here because Playwright ships browser builds that occasionally
+# need a nudge to match the current Chromium, because ESLint moves quickly
+# enough that pinning it forever is how a linter stops catching new mistakes,
+# and because the GitHub Actions in .github/workflows should not drift on
+# their own.
+#
+# The vendored libraries under vendor/ are not listed: they are checked in, and
+# their versions are recorded in vendor/README.md. Bumping one is a deliberate
+# commit, not an automated merge, because each ships binary assets.
+
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Etc/UTC
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+    commit-message:
+      prefix: 'deps'
+    groups:
+      playwright:
+        patterns:
+          - playwright
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: 'ci'

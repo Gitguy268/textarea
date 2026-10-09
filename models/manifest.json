@@ -1,0 +1,29 @@
+{
+  "name": "lm-kit/gemma-3-270m-instruct-gguf",
+  "file": "gemma-3-270M-it-Q4_K_M.gguf",
+  "quantization": "Q4_K_M",
+  "totalSize": 253114976,
+  "sha256": "e28b323bc75925d6edc8d3f030268830bf53c59c296d77278ac24653403d9d47",
+  "chunks": [
+    {
+      "path": "gemma-3-270M-it-Q4_K_M.part1",
+      "size": 67108864,
+      "sha256": "b9c8c9737ad679e7125b39e84e9498a5409df0c6fd94e3a93aa34220c6775030"
+    },
+    {
+      "path": "gemma-3-270M-it-Q4_K_M.part2",
+      "size": 67108864,
+      "sha256": "9ba7cee3cb9e4d3070df958a742e220b4768e30fe467aa0364545c5647536684"
+    },
+    {
+      "path": "gemma-3-270M-it-Q4_K_M.part3",
+      "size": 67108864,
+      "sha256": "45416661d1c66620de29490a6c9fa248655ce483bb45c324f38a1288fa05affa"
+    },
+    {
+      "path": "gemma-3-270M-it-Q4_K_M.part4",
+      "size": 51788384,
+      "sha256": "651e9ac43d0caae41227117f71212478af80cd35f90e2e53daa9ea7b11849113"
+    }
+  ]
+}

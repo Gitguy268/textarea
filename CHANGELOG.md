@@ -1,0 +1,386 @@
+# Changelog
+
+All notable changes to this project are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project tries
+to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+The app ships as a single page rather than as releases, so treat "Unreleased" as
+what is on `main` right now.
+
+## [Unreleased]
+
+### Added
+
+- **One Export panel** with four destinations: save to a file, copy to the
+  clipboard, a QR code, or an archive. File and clipboard share one format list
+  and one converter, so what is copied is byte for byte what a download would
+  have written. No new export formats were introduced.
+- **Copy to the clipboard** in all nine existing formats, with a fallback for
+  browsers where the Clipboard API is unavailable, such as a page served over
+  plain `http://`.
+- **A QR code** of the note's link, drawn on screen for scanning and downloadable
+  as SVG. Carries the link rather than the text, warns when the note is encrypted,
+  and reports a payload that is too long instead of drawing an unscannable square.
+- **A document library** in IndexedDB, written about half a second after you stop
+  typing and listed under **My documents** with search over titles and bodies.
+  One row per note rather than one per keystroke, and separate per tab.
+- **Folder sync**: a two-way mirror between the library and a folder picked from
+  the menu with the File System Access API, one markdown file per note with a
+  front matter block (id, timestamps, word count, style). Newest wins between
+  the two sides, deletions mirror, files the app never wrote are only read or
+  imported — never removed — and the first pass over a folder removes nothing.
+  The pass runs on budgets, like every other input: a file over 10 MB is left
+  untouched without being read, and a pass stops before a folder with more
+  than 1,000 markdown files or 100 MB of them. Runs while the app is open (on
+  save, focus and tab return), offered only in Chrome and Edge where the API
+  exists, and documented as writing plaintext files: that is what makes them
+  editable in any editor.
+- **Statistics** for words, characters, characters without spaces, lines,
+  sentences and two reading estimates, in a panel that follows the note as you
+  type. CJK is counted a character at a time.
+- **One Encryption menu entry** offering both sides of the same switch, in place
+  of two menu rows one of which was usually hidden.
+- Conditional dialog fields and an icon slot in the shared `<dialog>` builder.
+- Community health files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
+  `SECURITY.md`, issue and pull request templates, and Dependabot.
+- **`llms.txt`** at the site root, following the
+  [llmstxt.org](https://llmstxt.org/) proposal: a short summary of what the app
+  is and does, then a file list of the documentation in this repository, with
+  every link landing on raw markdown rather than on a web page.
+  `llms-full.txt` carries the README, the changelog and the contributing guide
+  in one file, `index.html` advertises the file with `rel="describedby"`, and a
+  unit test checks the shape, the links, and that the full file still matches
+  the three documents it is built from.
+- **The page declares its icons, and the crawlers are told where the site is**:
+  `index.html` links `favicon.ico`, `favicon.png` and the Apple touch icon
+  rather than leaving the browser to guess, and `robots.txt` with `sitemap.xml`
+  publish the one page there is to index. CI runs lychee over every link in the
+  documentation and the pages on every pull request, and a unit test covers
+  what a network checker cannot see: relative links, anchors, the service
+  worker shell, and the domain `robots.txt`, `sitemap.xml` and `llms.txt` are
+  supposed to agree on.
+- **Liquid glass** behind a **Glass** row in the menu: the menu, the dialogs and
+  the statistics panel refract the page visible through them, via an SVG
+  displacement filter built by the vendored
+  [deepika-builds/liquid-glass](https://github.com/deepika-builds/liquid-glass)
+  (MIT), pinned to a commit since upstream tags nothing. The panels are opaque
+  unless the row is on — an opaque panel has nothing behind it to bend — and
+  become exactly the boxes they were again when it goes off. A browser that
+  cannot use an SVG filter as a backdrop (Safari, Firefox) gets the module's
+  frosted blur instead, and a reader whose system asks for reduced transparency
+  gets the opaque app with the row not offered at all. The module is imported
+  on first use like the other vendored libraries, and `lib/glass.js` joins the
+  service worker shell, whose cache version moves with every file added to it.
+- **"Sync now"** as a second folder-sync row, hidden while no folder is
+  connected: it forces the pass immediately and reports what it did — what was
+  written, imported or removed, or plainly that the folder already holds every
+  note — in the same bubble as everything else. The row sits directly under
+  the folder row, so keyboard and screen-reader order reaches the state it
+  acts on next.
+- **The folder row says how the mirror is going**: "Syncing…", "Waiting to
+  sync", "Sync problem" or "Up to date", read fresh when the menu opens, with
+  the problem sticking until a pass succeeds again. A remembered folder whose
+  permission was revoked keeps its name in the row and is told politely —
+  `Folder sync needs permission for "notes" again` — instead of the row
+  falling back to a bare "Folder sync" that reads as sync simply being off.
+- **A folder change says how to take it back**: the message on arrival is now
+  "Updated from the folder — Ctrl+Z or ⌘Z undoes it", naming both modifier
+  keys rather than sniffing for a Mac.
+- **docs/ARCHITECTURE.md**: the module map and the data flows — which file
+  owns the URL, the library and the mirror, and how a note moves between
+  them — linked from the README's Development section and listed in
+  `llms.txt`. The contributing guide grew the browser suite's anatomy (its
+  waits, `syncRig`, the console gate's placement rule, how to run one test),
+  and the issue forms gained "Folder sync" and highlighting as where a
+  problem belongs.
+- **Links from the note to where they point.** An email address typed into
+  the note becomes a `mailto:` link, `google:something` becomes a search
+  link, and a path to a file on this computer becomes a link that opens it —
+  the last behind its own switch in Settings, because a line that looks like
+  a path is often just a line of prose.
+- **An appearance of the reader's own**: an accent colour, the note's font,
+  its size and its line spacing, each remembered across visits and applied
+  as CSS custom properties, so one accent carries through the menu, the
+  panels and the note itself.
+- **One Settings panel** holding every switch in the app: the rows the menu
+  used to carry one at a time (glass, statistics, two columns, file links,
+  wikilinks) sit beside the newer ones — backlinks, the quick switcher with
+  its scope and chord, and every writing tool with its own row — and each
+  keeps its menu row in step with the panel it belongs to.
+- **`[[wikilinks]]`**: a title in double brackets becomes a link to that
+  note. Rendering them is a switch, off until it is thrown — a note written
+  without this fork renders exactly as it always did — and while it is on, a
+  click on a title that names nothing creates the note, which is the default
+  Obsidian readers expect and the first thing others want taken away. Each
+  half has its own switch.
+- **A Backlinks panel** listing every note that reaches this one while you
+  read it: `[[wikilinks]]` always, plain mentions of the title on a second
+  switch. Both the panel and the mentions are off until asked for, and the
+  panel follows the note as it changes.
+- **A quick switcher on a chord**: Ctrl/Cmd+K opens a palette over the note
+  — P or E are the alternative chords, under Settings — and a few letters
+  filter every title, or every body under the scope setting, with Enter
+  jumping to the match. It is on by default, and its row lives in Settings
+  rather than the menu because the feature has no panel to open.
+- **Writing tools that run on this machine.** A side panel with five
+  one-press tools — improve wording, shorten, summarise, fix grammar, make
+  it more casual — each with its own switch, plus one line of the reader's
+  instructions appended to every prompt. The answer appears for reading and
+  replaces the note only when **Replace** is pressed; undo takes it back.
+  The engine is llama.cpp vendored as wllama under `vendor/`, and the model
+  ships with the repository: Gemma 3 270M in four chunks under `models/`,
+  each verified against a pinned SHA-256 before anything loads. No request
+  carries a word of the note anywhere — the prompt is this note, cut in
+  plain sight past 24,000 characters — and the first Run caches the model
+  for every run after, offline included. The panel is fetched on the click
+  that opens it, the engine on the Run that needs it;
+  `npm run check:model` presses that button for real, because the test
+  suite deliberately will not.
+- **Fonts of the reader's own.** The note font list grows past the four
+  built-ins: a TTF, OTF, WOFF or WOFF2 file from your disk, or a link to one
+  in a public GitHub repository, joins the same select and applies to the note
+  like any other family. The picker filters on the four formats every browser
+  can load, but the picker is not the gate: the signature is checked first and
+  then the browser itself judges the bytes through `FontFace.load()`, so a
+  corrupt or lying file is refused with a message instead of stored. The bytes
+  live in their own IndexedDB database — five megabytes and ten fonts — and
+  registering one needs no policy change, because the buffer is handed to the
+  `FontFace` constructor rather than fetched from a URL. The GitHub half reads
+  exactly one file, rewritten from a blob link or a raw link and turned down
+  before the fetch on any other host; the declared length is checked and the
+  bytes are counted as they arrive, so a body over the cap is never held
+  whole. The shelf is on until switched off, because it does nothing until a
+  file is put on it: switching it off returns a note wearing a custom font to
+  a system stack, and removing a font takes the preference with it in the
+  same breath. The fixture the browser suite uploads is Silkscreen, OFL-1.1
+  from google/fonts.
+- **Find and replace** on Ctrl/Cmd+F: a bar over the note with a live count
+  of the matches, previous and next walking from either end with wraparound,
+  **Replace** for one and **Replace all** with the number it changed — and a
+  help line saying what Enter, Shift+Enter and Escape do. The chord is the
+  app's while the switch is on, and turning it off hands Ctrl+F back
+  unclaimed; Shift and Alt stay out of the comparison either way, so the
+  browser's own variants of the shortcut are never swallowed. The engine is
+  pure arithmetic over the text, unit tested without a page: the query is
+  escaped before it becomes a pattern, so a note full of prices finds `a.b`
+  only where a dot was actually typed; matches never overlap and the scan
+  always advances; case folding happens in the pattern rather than in the
+  note, so the ranges still slice the text the reader is looking at; and a
+  replacement that itself matches the query is pasted once and passed over,
+  which is what keeps **Replace all** finite. Each replace goes through the
+  editor as the keystroke it is — one undo takes a single replace back, and
+  one undo takes the whole batch — while match case and whole words ship as
+  the bar's own defaults behind one preference with two faces, so an open
+  bar and the Settings row cannot disagree. The bar arrives on the first
+  press, not at boot.
+- **Backup** from the menu, beside **My documents**, behind a switch that
+  ships on: the click flushes the pending save — the note on screen is in
+  the archive as it stands — and then writes every note into a single ZIP.
+  The entries are Folder sync's own output, named against one shared
+  collision set, so the archive is that format byte for byte: unzip it,
+  point Folder sync at the folder, and the notes come back with their ids,
+  timestamps and style intact, which is what makes this a backup rather
+  than a second export format. The flow is all or nothing — list, write,
+  save, report — because a backup that could stop halfway would be worse
+  than no backup at all, and a refused storage or an empty library is said
+  plainly instead of guessed at. **Include note metadata** ships on, since
+  the front matter block is what makes the archive restorable, and
+  **Encrypt with a password** ships off: on, every backup asks for the same
+  password twice through the Export panel's dialog before anything is
+  written. The module waits behind the click, so a reader who never backs
+  up never pays for the code that writes one.
+- **A trash for deleted notes**, behind a switch that ships on: a delete
+  from the documents panel moves the note whole into a second store of the
+  same database — one transaction over both stores, so a note is never in
+  neither store or in both — and the bubble says where it went. The
+  **Trash** row opens the documents panel's second face: what was deleted,
+  newest first, each card showing when it went, with one click putting the
+  note back exactly as it was — same id, same text, minus the deletion
+  stamp that is the trash's bookkeeping and not part of the note — a
+  corner button taking one for good behind a question that says so, and
+  **Empty** clearing the rest. Deleted notes are kept for 30 days (7 or 90
+  in Settings, a stray value falling back to the shipped 30) and anything
+  past its days is purged on the way into the panel, the only place the
+  store is read. Switch it off and deletes are for good again, with the
+  confirmation describing the true promise either way, because a note
+  waiting in the trash and a note removed are different sentences. The
+  upgrade that adds the store leaves every note already held exactly where
+  it was.
+- **The writing tools can run on the selection.** A switch in Settings —
+  off as it ships — turns **Run** into a run over whatever the reader
+  highlighted: the prompt then carries only that run, so the rest of the
+  note never reaches the model, and the answer goes back where the Run
+  looked rather than wherever the caret has wandered to since, with the
+  button naming which of the two it will replace. A selection of only
+  whitespace is not worth taking — a stray drag across a line break should
+  not quietly halve what the model is asked about — so it falls through to
+  the whole note, the way an empty selection does.
+- **Tasks.** A `- [ ]` after a list marker draws as a checkbox, behind a
+  switch that ships off — the brackets live on in the text, unhidden and
+  editable and copied as typed, so a note written without this fork renders
+  as it always did. A click on the box writes the one character the task is
+  made of through the editor, so undo, autosave and the library all see the
+  keystroke it is. A second switch, also off, adds a **Tasks** row to the
+  menu that gathers every open task in the library — newest note first,
+  each row opening the note it came from — and what counts as a task there
+  is the renderer's own answer, walked through the same tree the note draws
+  from, so a bracket inside a fenced block never reaches either half.
+  Ticked work stays off the list until its own option is thrown, and an
+  open panel is pushed the news where the backlinks panel is pushed it: a
+  save, a load, a delete, a restore.
+
+### Changed
+
+- **Save as**, **Save as ZIP** and **Open file** are now one **Export** entry, a
+  **Documents** entry and an **Open file** entry. The archive is the fourth
+  destination inside the Export panel rather than a row in the menu.
+- The menu's GitHub link points at this repository rather than upstream's.
+- `Cmd/Ctrl+S` opens the Export panel instead of saving straight to a text file.
+- The document library keeps writing while a note is encrypted, so turning
+  encryption on does not silently stop the backup.
+- **My documents** is a grid of sticky-note cards instead of a list of rows:
+  each note is a yellow square with its title, its first lines and the date it
+  was last edited, and the whole card opens it. The card for the note on screen
+  is ringed and badged rather than tinted, because a tinted card reads as
+  "selected" and it is only open. The word count left the face of the card and
+  stays in the button's accessible name.
+- pdf.js, zip.js and the new QR encoder are all fetched on demand rather than
+  precached, so a session that only types downloads none of them.
+- **A big note re-renders about ten times faster.** The measured cost of one
+  highlight cycle on a 1 MB note fell from 1037ms to 91ms, and a pasted
+  single-blob note — no line break anywhere — from 2666ms to 13ms, now
+  scaling linearly instead of quadratically. The rendered tree is identical
+  before and after; only the main-thread time moved.
+  `node tests/perf.js` prints these numbers for anyone who wants to re-take
+  them.
+- **The boot downloads less.** The panels behind the menu entries a reader
+  opens once a month — Export, Documents, Encryption, Settings, Backlinks,
+  Backup and Trash — the find bar, the tasks panel, the QR encoder, the
+  quick switcher and the writing tools are fetched when their entry is
+  first used instead of parsed at boot: 21 modules and 263 kB eager, where
+  parsing everything up front would be 35 modules and 395 kB. A startup
+  test fails if any deferred file shows up in a fresh load's resource
+  timing, and the panel still arrives on the click that needs it.
+- **Undo keeps what the note said, not how it happened to be rendered.**
+  History records hold the text and caret rather than a DOM snapshot, so
+  restoring re-runs the highlighter, identical text dedupes, and a marker
+  typed as text (`<img src=x onerror=…>`) stays text through undo and redo.
+- **The sync UI reads the way assistive technology reaches it**: the menu
+  assertion resolves the row by role and accessible name rather than by its
+  label span, and a failed pass lands as an assertive, error-styled message
+  with words in it while the row keeps "Sync problem" after the bubble's
+  moment has passed.
+
+### Fixed
+
+- The QR code, close and delete icons are Google's own paths in Google's own
+  `viewBox`, copied verbatim rather than hand-rescaled. The rescale had mirrored
+  the QR code and the trash can about the horizontal axis: the QR code's three
+  finder patterns sat at top-left, bottom-left and bottom-right instead of
+  top-left, top-right and bottom-left, and the trash can's lid was underneath it.
+  A unit test now compares them against the published files byte for byte,
+  and a second test states the QR code's layout geometrically so a failure says
+  what is wrong rather than only that two strings differ.
+- The service worker's cache version is bumped with the shell, so a returning
+  tab picks up an `index.html` that has changed rather than answering from the
+  cache it installed before.
+- The browser test harness records every notification in the page instead of
+  polling the bubble, so an action slower than the bubble's two-second display
+  can no longer miss a correct message. This was making the encrypted-archive
+  test fail intermittently with no visible cause.
+- `llms.txt` sent "The app" to upstream's deployment on `pages.dev` rather than
+  to this fork's; it now names the deployed domain, and a unit test checks that
+  it, `robots.txt` and `sitemap.xml` still agree on it.
+- A folder-sync pass is now exclusive from start to finish: it cancels the
+  pending save-pause it supersedes, takes a Web Lock so a second tab's pass
+  waits its turn instead of interleaving writes in the same folder, gives a
+  deletion queued mid-pass the last word over that pass's already-built plan,
+  and cannot let a disconnect mid-pass commit the old folder's plan over the
+  folder picked to replace it.
+- A front matter block full of junk lines is read line by line with the junk
+  skipped, and a block that never closes leaves the whole file — fences
+  included — as the note instead of failing the pass. A library emptied
+  behind the mirror's back (storage cleared, another tab, a crashed hook)
+  takes its folder's files with it through the manifest rather than leaving
+  orphans the next reader would meet.
+- The browser suite waits for what happened instead of guessing how long it
+  might take: fixed sleeps became polls for the condition they were
+  guessing at, tests that need a save ask for it instead of waiting out the
+  debounce, and `reset()` stopped spending round trips it could combine —
+  57s to 33s. The console gate listens on every page the context opens, not
+  just the first, proves itself with a deliberate rejection, and is
+  genuinely the last test in the file again: sixteen folder-sync tests had
+  been growing underneath it, unjudged.
+- The rules that used to rest on review now have tests where they are
+  cheapest to trust: the service worker's decisions drive a unit test
+  (install survives a missing file, an activation prunes exactly its
+  version's caches, vendored files answer from cache and are never cached
+  as a range, an offline navigation falls back to the shell), the folder's
+  read budgets run against a folder of plain objects, and the two
+  folder-sync races sit behind a gate hook that holds a pass open long
+  enough to reproduce them.
+- `insert()` and `replace()` put the far side of the change on the undo
+  stack now — the text that went in, not only the text they took out. Undo
+  lands on the record below the pointer, so with that far side missing the
+  first Ctrl+Z after either change answered with whatever the stack held
+  underneath it, or with nothing at all on a fresh stack: one undo took
+  back more than the change it belonged to, and the first edit of a session
+  took back nothing. Both ends of a programmatic change go on the stack
+  now, the way a keystroke's keydown and keyup leave both behind.
+
+### Security
+
+- The `style` half of a shared link is no longer applied verbatim. A crafted
+  URL could carry declarations that cover the interface (`position: fixed`) or
+  fetch a third party on render (`background: url(...)`); the attribute now
+  passes through an allowlist in `lib/style.js`, parsed by the CSSOM, so only
+  decorative properties survive — the DevTools styling tip keeps working for
+  colours, fonts and the like. The same filter runs on the copy restored from
+  the document library.
+- Links inside the note open with `noopener,noreferrer`, and the two
+  `target="_blank"` menu links carry `rel="noopener noreferrer"` explicitly, so
+  a page reached from a note never holds `window.opener` on the editor.
+- The deployment sends security headers: a Content-Security-Policy
+  (`script-src 'self' 'wasm-unsafe-eval'` — the grant is WebAssembly
+  compilation only: no `unsafe-eval`, no `unsafe-inline`,
+  `frame-ancestors 'none'`),
+  `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+  `Permissions-Policy`, `Cross-Origin-Opener-Policy` and HSTS.
+  `tests/serve.js` serves the same headers so the browser tests run under the
+  real policy, and a unit test keeps the two files in step.
+- The font shelf's GitHub import gained exactly one door in that policy:
+  `connect-src 'self' https://raw.githubusercontent.com` — one origin, named,
+  no wildcard — in `vercel.json` and in `tests/serve.js` together. The other
+  half of the promise lives in `lib/fonts.js`, which turns every other link
+  down before the fetch is made, and a unit test compares the whole
+  `connect-src` directive against the string it is supposed to be, so taking
+  the grant out, widening it, or letting the two files drift each fail by
+  name.
+- The model that ships in this repository is checked before it runs: every
+  transport chunk under `models/` is verified against the SHA-256 pinned for
+  it in `models/manifest.json`, and a mismatch stops the load with the
+  file's name in the message rather than running bytes that are not this
+  repository's. The chunks round-trip to the exact upstream file, whose
+  whole-file digest was independently confirmed against the host's own.
+- Opening an archive is bounded: more than 1000 files, or more than 100 MB
+  expanded in total, is refused with a message instead of read; a header that
+  understates the size is caught by zip.js the moment output overruns it; and
+  a file picked from disk over 200 MB is rejected before its bytes are read.
+- A note whose hash expands past 64 MB of text is refused by the decoder
+  instead of being inflated into the tab.
+- CSV exports neutralise leading `=`, `+`, `-`, `@`, tab and CR with a single
+  quote, so a spreadsheet cannot evaluate a note line as a formula (CWE-1236).
+- The test server neither lists nor serves `.git`.
+- No `innerHTML` remains anywhere in the app's code. The exported HTML page
+  re-renders the note from its text through the same highlighter the editor
+  uses rather than copying live markup; the documents and statistics panels
+  build their icon buttons through the shared `icon()` helper; and the QR
+  figure parses the encoder's SVG as the XML it says it is. Nothing in the
+  app points a parser at generated markup on the reader's behalf.
+
+## [Upstream]
+
+Everything before this fork is [antonmedv/textarea](https://github.com/antonmedv/textarea),
+MIT © Anton Medvedev, forked from `master` as of 2026-10-05. Its history is in
+the git log before the first commit here; the differences this fork introduces are
+listed in the README under **Differences from upstream**.

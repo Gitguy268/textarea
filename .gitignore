@@ -1,0 +1,21 @@
+# Build and install output
+node_modules/
+test-results/
+
+# Local environment: no file here is ever committed, so no real value can
+# leak into the history by accident. .env.example is the one exception — it
+# holds placeholders only.
+.env
+.env.*
+!.env.example
+
+# Vercel CLI link, created by `vercel link` during local debugging
+.vercel/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- One page, so one entry: the hash routes below it are the same document to
+     a crawler, and listing them would invent URLs that are not addresses. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://gitguy268-textarea.vercel.app/</loc>
+    <lastmod>2026-10-07</lastmod>
+  </url>
+</urlset>

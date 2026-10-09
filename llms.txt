@@ -1,0 +1,75 @@
+# Textarea
+
+> A minimalist text editor that runs entirely in your browser. Notes live in the
+> URL, in a document library in your own browser, or — if you ask for it — in a
+> folder you pick on your own disk; nothing is uploaded, there is no account,
+> and there is no server.
+
+This is a fork of [antonmedv/textarea](https://github.com/antonmedv/textarea).
+The site is static — `index.html`, `app.js` and the modules under `lib/` — so
+there is no API to call, no account to hold, and nothing here to authenticate
+against. Everything below is the behaviour of that one page.
+
+What usually needs answering:
+
+- **Where is a note kept?** Compressed into the URL fragment (`#…`), which
+  browsers never send to a server, and mirrored into IndexedDB about half a
+  second after you stop typing. An opt-in **folder sync** mirrors the library
+  both ways with a folder you pick, as one markdown file per note with a small
+  front matter block; newest wins and deletions mirror. Export writes it out
+  as a file, on the clipboard, as a QR code, or as a ZIP archive.
+- **Does anything leave the machine?** No note ever does: no network call
+  carries note content, the third-party libraries are cached locally by a
+  service worker, and clearing site data deletes the library. The one
+  outbound read is the font shelf's GitHub import — a link you paste, one
+  file fetched from `raw.githubusercontent.com` and nowhere else, only while
+  its button is pressed. Folder sync writes files to a folder on your own
+  disk and nowhere else — plaintext markdown, because that is what makes
+  them editable in any other program — and it never removes a file it did
+  not write itself. The library is a local backup, not a network sync
+  service: deleting a note parks it in a trash beside the library for 30
+  days (one click brings it back), and **Backup** writes every note into a
+  single ZIP in Folder sync's own file format — the copy to take before a
+  browser profile goes away.
+- **Is there an AI feature, and does it phone home?** The writing tools are
+  five one-press rewrites (improve, shorten, summarise, fix grammar, make
+  casual) with a line of your own instructions appended, run by a Gemma 3
+  270M model that ships with the repository — four chunks under `models/`,
+  each checked against a pinned SHA-256 before anything loads, fetched and
+  cached by the site itself. The prompt is at most 24,000 characters of the
+  note — or of just the selection, behind a second switch that ships off —
+  and it never leaves the machine; the feature is off until its switch
+  is thrown, and the engine and weights are fetched on the first run
+  rather than at boot.
+- **What is encrypted, and with what?** AES-256-GCM, both for an encrypted link
+  (key derived from the password with PBKDF2-HMAC-SHA256) and for a WinZip AES
+  archive. The password is never stored and never appears in the link, and a
+  lost password cannot be recovered.
+- **What can it open?** Text as UTF-8 with a Windows-1252 fallback, PDFs
+  through pdf.js with two-column detection, and ZIP archives through zip.js —
+  the last two fetched on demand, never from a CDN.
+- **What can it write?** Nine formats: txt, md, html, json, csv, xml, rtf, tex
+  and yaml, each on its own or in any combination inside one archive.
+- **How do I find text, or tick a task?** Ctrl/Cmd+F opens the app's own
+  find bar — match case, whole words, replace one or all — while its switch
+  is on, which it is as it ships; off, the browser's find keeps the chord.
+  A line starting `- [ ]` or `- [x]` draws as a clickable checkbox behind
+  the Tasks switch (off as it ships), and a **Tasks** panel gathers every
+  open task across the library with a jump to the note it came from. Every
+  one of these is a switch in Settings.
+
+## Documentation
+
+- [README](https://raw.githubusercontent.com/gitguy268/textarea/main/README.md): what the app does, how to use it, and every difference from upstream
+- [Changelog](https://raw.githubusercontent.com/gitguy268/textarea/main/CHANGELOG.md): what changed in this fork, newest first
+- [Contributing](https://raw.githubusercontent.com/gitguy268/textarea/main/CONTRIBUTING.md): how the code is laid out, how to run the tests, and the two hard rules
+- [Architecture](https://raw.githubusercontent.com/gitguy268/textarea/main/docs/ARCHITECTURE.md): the module map, and how a note moves between the URL, the library and the folder mirror
+- [Security policy](https://raw.githubusercontent.com/gitguy268/textarea/main/SECURITY.md): what the app protects against, and what it does not
+- [Code of conduct](https://raw.githubusercontent.com/gitguy268/textarea/main/CODE_OF_CONDUCT.md): what is expected of people taking part
+
+## Optional
+
+- [Full documentation](https://raw.githubusercontent.com/gitguy268/textarea/main/llms-full.txt): the README, the changelog and the contributing guide in one file
+- [The app](https://gitguy268-textarea.vercel.app/): the deployed editor
+- [Source](https://github.com/gitguy268/textarea): repository, issues and pull requests
+- [Licence](https://raw.githubusercontent.com/gitguy268/textarea/main/LICENSE): MIT, based on MIT © Anton Medvedev

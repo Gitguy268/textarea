@@ -1,0 +1,90 @@
+name: tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install the browser
+        # The browser suite drives Chromium through Playwright. Without this the
+        # browser tests fail on a missing executable rather than on a real bug.
+        run: npx playwright install --with-deps chromium
+
+      - name: Lint and syntax check
+        run: npm run check
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Browser tests
+        # --test-concurrency=1 is set in the script itself: the suite shares a
+        # service worker and a download directory, and parallel files race on
+        # both.
+        run: npm run test:browser
+
+  links:
+    runs-on: ubuntu-latest
+    # After `test` rather than beside it: the push that starts this run also
+    # starts the Vercel deploy, and a link check that races a fresh deployment
+    # reads a 404 for a site that is actually up. The test job buys the
+    # deployment a couple of minutes to exist.
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check links
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          # --root-dir resolves the root-relative link in 404.html against the
+          # checkout; --exclude-loopback drops the local preview URL in
+          # CONTRIBUTING.md. 403/429 are accepted because several sites answer
+          # CI address ranges with a bot wall; ScienceDirect is excluded
+          # outright because it answers 404 to every automated client, always.
+          # The inputs are listed one by one: a glob would drag node_modules
+          # into the crawl.
+          args: >-
+            --no-progress
+            --root-dir .
+            --exclude-loopback
+            --accept '200,204,403,429'
+            --exclude 'sciencedirect\.com'
+            README.md
+            CONTRIBUTING.md
+            CODE_OF_CONDUCT.md
+            SECURITY.md
+            CHANGELOG.md
+            llms.txt
+            llms-full.txt
+            vendor/README.md
+            index.html
+            404.html
+            robots.txt
+            sitemap.xml
+            .github/PULL_REQUEST_TEMPLATE.md
+            .github/ISSUE_TEMPLATE/bug_report.yml
+            .github/ISSUE_TEMPLATE/config.yml
+            .github/ISSUE_TEMPLATE/feature_request.yml
+          fail: true
+          lycheeVersion: v0.24.2

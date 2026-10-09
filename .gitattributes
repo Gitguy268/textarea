@@ -1,0 +1,18 @@
+# Normalise line endings in the repository. The service worker, the hash codec and
+# the export formats all treat \r\n as content, so a file that silently changes
+# line endings between platforms changes what an exported note says.
+
+* text=auto eol=lf
+
+# These are binary and must never be touched: PDF cmaps, standard font metrics,
+# icons and screenshots.
+*.bcmap binary
+*.pfb binary
+*.png binary
+*.ico binary
+*.webp binary
+vendor/**/*.mjs text eol=lf
+vendor/**/*.js text eol=lf
+
+# Keep the vendored libraries out of language statistics and diffs where possible.
+vendor/** linguist-vendored
