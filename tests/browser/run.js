@@ -5774,6 +5774,90 @@ test('folder sync: a second tab waits for the pass already running', async () =>
 // it and none below. It sat mid-file while sixteen folder sync tests grew
 // underneath it, its comment calling it "the last test in the suite" - so new
 // tests go above this, never after it.
+test('a tab hidden mid-pause saves at once instead of waiting the pause out', async () => {
+  await setNote('# Before')
+  await saveNow()
+  const before = await page.evaluate(() => location.hash)
+
+  // One keystroke's worth of change, then the tab goes away inside the 500ms
+  // the autosave would have waited. replace() raises the same input event a
+  // key does, so the pause is running when the page is told it is hidden.
+  const moved = await page.evaluate(async (was) => {
+    globalThis.textarea.editor.replace('# After the pause would have lost this')
+    Object.defineProperty(document, 'visibilityState', {value: 'hidden', configurable: true})
+    document.dispatchEvent(new Event('visibilitychange'))
+    delete document.visibilityState
+    // Well inside the pause: only the flush can have written this.
+    for (let waited = 0; waited < 300; waited += 20) {
+      if (location.hash !== was) return true
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    return false
+  }, before)
+  assert.equal(moved, true, 'the hash was rewritten before the 500ms pause ran out')
+  const hash = await page.evaluate(() => location.hash)
+  assert.equal(await decodeHash(hash.slice(1)), '# After the pause would have lost this')
+
+  // The library has it too, which is what survives a tab that really closes.
+  await until(
+    async () => {
+      const {getDocument} = await import('/lib/library.js')
+      const row = await getDocument(globalThis.textarea.documentId)
+      return row?.text === '# After the pause would have lost this'
+    },
+    {what: 'the flushed text to reach the library'},
+  )
+
+  // pagehide is the same flush, for the tab that is closed rather than hidden.
+  const closed = await page.evaluate(async () => {
+    const was = location.hash
+    globalThis.textarea.editor.replace('# Closed')
+    dispatchEvent(new Event('pagehide'))
+    for (let waited = 0; waited < 300; waited += 20) {
+      if (location.hash !== was) return true
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    return false
+  })
+  assert.equal(closed, true, 'pagehide flushed the save as well')
+})
+
+test('a library that stops keeping notes says so, once', async () => {
+  await setNote('# Kept in the link')
+  await saveNow()
+
+  // The quota is the browser's to enforce, so the failure is injected where
+  // it would surface: the write itself.
+  await page.evaluate(() => {
+    globalThis.__put = IDBObjectStore.prototype.put
+    IDBObjectStore.prototype.put = function () {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError')
+    }
+  })
+  try {
+    await notification(async () => {
+      await setNote('# Kept in the link, not in the library')
+      await saveNow()
+    })
+    const bubble = page.locator('#notification')
+    assert.match(await bubble.textContent(), /could not be saved to your documents/)
+    assert.equal(await bubble.getAttribute('aria-live'), 'assertive')
+    // The note itself is untouched: the link still carries it.
+    const hash = await page.evaluate(() => location.hash)
+    assert.equal(await decodeHash(hash.slice(1)), '# Kept in the link, not in the library')
+
+    // A second failed save does not ring the bubble again.
+    const sequence = await bubble.getAttribute('data-sequence')
+    await setNote('# Still failing')
+    await saveNow()
+    assert.equal(await bubble.getAttribute('data-sequence'), sequence)
+  } finally {
+    await page.evaluate(() => {
+      IDBObjectStore.prototype.put = globalThis.__put
+    })
+  }
+})
+
 test('nothing logged an error along the way', () => {
   const noise = consoleErrors.filter(
     (message) =>

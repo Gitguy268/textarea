@@ -164,3 +164,11 @@ test('isHashTooLong flags a note that will break URLs', () => {
   assert.equal(isHashTooLong('#' + 'a'.repeat(9000)), true)
   assert.equal(isHashTooLong('#' + 'a'.repeat(9000), 500), true)
 })
+
+test('a link is called long before it is called too long', async () => {
+  const {isHashGettingLong, isHashTooLong} = await import('../../lib/share.js')
+  assert.equal(isHashGettingLong('#' + 'a'.repeat(5000)), false)
+  assert.equal(isHashGettingLong('#' + 'a'.repeat(6500)), true)
+  assert.equal(isHashTooLong('#' + 'a'.repeat(6500)), false)
+  assert.equal(isHashTooLong('#' + 'a'.repeat(8500)), true)
+})

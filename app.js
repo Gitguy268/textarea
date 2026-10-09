@@ -3,7 +3,6 @@
 // lives in lib/ - see docs/ARCHITECTURE.md for which file owns what.
 
 import {applyAppearance, isCustomFont, readAppearance} from './lib/appearance.js'
-import {debounce} from './lib/editor.js'
 import {readNote} from './lib/export.js'
 import {
   applyBacklinksPreference,
@@ -30,10 +29,12 @@ import {
   article,
   documentId,
   editor,
+  flushSave,
   load,
   newDocument,
   openDocument,
   save,
+  scheduleSave,
   state,
   updateTitle,
 } from './lib/note.js'
@@ -91,15 +92,18 @@ function init() {
     if (name) notify(`Syncing to ${name}`)
   })
 
-  // The title follows the first keystroke; the URL and the library are rewritten
-  // on a pause, since re-compressing and re-writing a row on every character
-  // would be wasteful.
-  const debouncedSave = debounce(500, save)
+  // The title follows the first keystroke; the URL and the library are
+  // rewritten on a pause - and at once when the tab is hidden or closed, so
+  // the pause can never cost the last words typed.
   article.addEventListener('input', () => {
     updateTitle()
-    debouncedSave()
+    scheduleSave()
   })
   article.addEventListener('blur', save)
+  addEventListener('pagehide', flushSave)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushSave()
+  })
   article.addEventListener('click', (event) => {
     // The checkbox is a span, not a link, and it writes the one character
     // the task is made of - which the keyboard would have typed anyway.
