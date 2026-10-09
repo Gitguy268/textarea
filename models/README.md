@@ -2,7 +2,7 @@
 
 The point of this directory is that there is no download step: the weights a
 reader runs on are committed next to the code that runs them, so a first visit
-opens the tools, presses **Load model**, and inference starts — offline after
+opens the tools, presses **Run**, and inference starts — offline after
 the page has been seen once, with no Hugging Face request and no file picker
 anywhere in the flow.
 
@@ -51,7 +51,7 @@ cat models/*.part* | shasum -a 256
 
 The service worker never precaches these — 253 MB of model does not belong in
 an install event. They are ordinary same-origin GETs that the SW caches the
-first time **Load model** pulls them, so the second run works offline; the
+first time **Run** pulls them, so the second run works offline; the
 chunk filenames carry the version, which is why that cache never has to be
 blown away to see a new model.
 

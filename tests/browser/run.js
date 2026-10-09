@@ -5888,6 +5888,27 @@ test('axe finds no WCAG A or AA failure in either theme, on the page or in its p
     await page.locator('dialog[open]').waitFor({state: 'visible'})
     await scan(`${theme}: the quick switcher`)
     await page.keyboard.press('Escape')
+    await page.locator('dialog[open]').waitFor({state: 'hidden'})
+
+    // The command palette, which is off until asked for.
+    await page.evaluate(() => localStorage.setItem('textarea:palette', 'on'))
+    await page.keyboard.press('Control+Shift+P')
+    await page.locator('dialog[open] [role="option"]').first().waitFor()
+    await scan(`${theme}: the command palette`)
+    await page.keyboard.press('Escape')
+    await page.locator('dialog[open]').waitFor({state: 'hidden'})
+    await page.evaluate(() => localStorage.removeItem('textarea:palette'))
+
+    // The QR panel, reached the way a reader reaches it: through Export.
+    await page.keyboard.press('Control+s')
+    const exporting = page.locator('dialog.dialog[aria-label="Export"]')
+    await exporting.waitFor({state: 'visible'})
+    await exporting.locator('input[name=destination][value=qr]').check({force: true})
+    await exporting.locator('.dialog-button-primary').click()
+    await page.locator('dialog.dialog-qr svg').first().waitFor({state: 'visible', timeout: 30_000})
+    await scan(`${theme}: the QR panel`)
+    await page.keyboard.press('Escape')
+    await page.locator('dialog.dialog-qr').waitFor({state: 'detached'})
   }
 
   // Leave the next test the profile it expects.

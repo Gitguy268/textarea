@@ -92,3 +92,20 @@ tests and 105 browser tests are all still here, none deleted or weakened.
 - [x] Clean console — B: *an unhandled rejection in a page reaches the error gate*, *nothing logged an error along the way*
 - [x] Docs do not drift — U: `llms.test.js`
 - [x] Vendored code and model identical to the original — `diff -r` against the original, SHA-256 against `models/manifest.json`
+
+## Added by the rebuild
+
+Not parity, but held to the same standard: each has a test.
+
+- [x] Modules split out of `app.js`; shell lists every one — U: `sw.test.js`, `prefs.test.js`
+- [x] Save on hide and on a real tab close — B: *a tab hidden mid-pause saves at once instead of waiting the pause out*
+- [x] Library write failures are reported — B: *a library that stops keeping notes says so, once*
+- [x] Early long-link notice — U: `share.test.js`
+- [x] Patching renderer — B: *an edit redraws only the part of the note it touched*
+- [x] WCAG A/AA under axe, landmark, reduced motion, keyboard reach — B: *axe finds no WCAG A or AA failure in either theme, on the page or in its panels* and the three tests after it
+- [x] Command palette — B: *the command palette is off until asked for, then lists the menu and runs a row*
+- [x] Library sort — U: `library.test.js`; B: *the documents panel sorts by edit, by creation and by title, and remembers which*
+- [x] Word-count goal — U: `stats.test.js`; B: *a word-count goal shows in the statistics only once one is set*
+- [x] Library as one Markdown file — U: `backup.test.js`; B: *Backup can write the whole library as one Markdown file instead*
+- [x] Print stylesheet — B: *on paper there is the note and nothing else*
+- [x] Model download progress and cancel — U: `gemma.test.js`; B: *a model download can be cancelled, and cancelling is not an error*

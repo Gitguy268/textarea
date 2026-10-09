@@ -178,9 +178,9 @@ fallback, and an MIT licence with a standalone `LICENSE` file.
 | `wllama-compat.js` | 168 KB | Worker for the compatibility build |
 | `wllama-compat.wasm` | 15 MB | wasm32 llama.cpp for browsers without JSPI or memory64 (older Safari and Firefox), handed to `setCompat()` so those browsers work without a CDN |
 
-Nothing here loads until the reader opens the writing tools: `lib/gemma.js`
-imports `wllama.js` on that first open, and the worker, the wasm and the model
-in `../models/` are fetched only when **Load model** is pressed. The worker code
+Nothing here loads until the reader presses **Run** in the writing tools:
+that press fetches `lib/gemma.js`, which fetches and verifies the model in
+`../models/` and only then imports `wllama.js`, its worker and its wasm. The worker code
 for the modern build lives inside the bundle itself and runs from a blob URL,
 which the CSP's `worker-src 'self' blob:` already allowed before this arrived.
 
