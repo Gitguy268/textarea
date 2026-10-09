@@ -6238,6 +6238,65 @@ test('a model download can be cancelled, and cancelling is not an error', async 
   }
 })
 
+test('a tab that closed mid-keystroke reopens on what was typed, without a second copy', async () => {
+  // The state a closing tab leaves behind when its save never finished: the
+  // URL still says the old text, and the library row holds the new text under
+  // the mark that means "this row's address was never written".
+  const leaveUnfinished = async () => {
+    await setNote('# Draft')
+    await saveNow()
+    return page.evaluate(async () => {
+      const library = await import('/lib/library.js')
+      const id = globalThis.textarea.documentId
+      const row = await library.getDocument(id)
+      await library.putDocument({...row, text: '# Draft, and the last words', hash: '~'})
+      return {id, url: location.href}
+    })
+  }
+  const rows = () =>
+    page.evaluate(async () =>
+      (await (await import('/lib/library.js')).listDocuments()).map((entry) => ({
+        id: entry.id,
+        text: entry.text,
+        hash: entry.hash,
+      })),
+    )
+
+  // The tab comes back - a reload stands in for a restored session - and
+  // opens on the newer text, in the same row, with the address caught up.
+  const {id} = await leaveUnfinished()
+  await page.reload()
+  await page.waitForFunction(() => Boolean(globalThis.textarea))
+  await until(() => globalThis.textarea.article.textContent === '# Draft, and the last words', {
+    what: 'the unfinished text to reopen',
+  })
+  await until(async () => {
+    const row = await (await import('/lib/library.js')).getDocument(globalThis.textarea.documentId)
+    return row?.hash !== '~'
+  })
+  assert.equal(await page.evaluate(() => globalThis.textarea.documentId), id, 'the same row, not a new one')
+  const hash = await page.evaluate(() => location.hash)
+  assert.equal(await decodeHash(hash.slice(1)), '# Draft, and the last words')
+  assert.deepEqual(
+    (await rows()).map((row) => row.text),
+    ['# Draft, and the last words'],
+    'one note, not two',
+  )
+
+  // The same row found by a link opened fresh is not that link's note: the
+  // link opens as itself, and the unfinished text stays in the library.
+  const left = await leaveUnfinished()
+  const second = await context.newPage()
+  await second.goto(left.url)
+  await second.waitForFunction(() => globalThis.textarea?.article.textContent === '# Draft')
+  await second.close()
+  const after = await rows()
+  assert.ok(
+    after.some((row) => row.id === left.id && row.text === '# Draft, and the last words'),
+    'the unfinished text is still in the library',
+  )
+})
+
 test('a reader who never asked for folder sync never loads it, and gets no database for it', async () => {
   // A profile of its own: every other test here shares one, and one of them
   // has connected a folder in it.
