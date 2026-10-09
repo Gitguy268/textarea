@@ -1963,6 +1963,16 @@ test('startup: panels rarely opened are fetched when their entry is used', async
     'tasks-panel.js',
     'writing-tools.js',
     'gemma.js',
+    // Reading files, writing them, and mirroring to a folder: none of it is
+    // part of a session that only types.
+    'open.js',
+    'pdf.js',
+    'pdf-layout.js',
+    'zip.js',
+    'export.js',
+    'formats.js',
+    'save.js',
+    'folder-sync.js',
   ]) {
     assert.ok(!boot.some((name) => name.endsWith(file)), `${file} is not part of the boot`)
   }
@@ -6225,6 +6235,41 @@ test('a model download can be cancelled, and cancelling is not an error', async 
       delete globalThis.__modelBroken
       document.querySelector('#cancel-probe')?.remove()
     })
+  }
+})
+
+test('a reader who never asked for folder sync never loads it, and gets no database for it', async () => {
+  // A profile of its own: every other test here shares one, and one of them
+  // has connected a folder in it.
+  const fresh = await context.browser().newContext()
+  try {
+    const visitor = await fresh.newPage()
+    await visitor.goto(server.origin + '/')
+    await visitor.waitForFunction(() => Boolean(globalThis.textarea))
+    await visitor.evaluate(async () => {
+      globalThis.textarea.editor.replace('# A note, typed and saved')
+      await globalThis.textarea.save()
+    })
+    const seen = await visitor.evaluate(async () => ({
+      databases: (await indexedDB.databases()).map((database) => database.name),
+      engine: performance.getEntriesByType('resource').some((entry) => entry.name.endsWith('folder-sync.js')),
+      status: globalThis.textarea.folderSync.status,
+    }))
+    assert.ok(seen.databases.includes('textarea'), 'the library is there')
+    assert.ok(!seen.databases.includes('textarea-sync'), 'asking whether a folder is remembered created nothing')
+    assert.equal(seen.engine, false, 'the engine was not fetched')
+    // The status still has the shape the menu and the seam read.
+    assert.deepEqual(seen.status, {
+      supported: true,
+      active: false,
+      name: '',
+      syncing: false,
+      pending: false,
+      lastPass: null,
+      problem: null,
+    })
+  } finally {
+    await fresh.close()
   }
 })
 

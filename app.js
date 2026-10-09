@@ -3,7 +3,6 @@
 // lives in lib/ - see docs/ARCHITECTURE.md for which file owns what.
 
 import {applyAppearance, isCustomFont, readAppearance} from './lib/appearance.js'
-import {readNote} from './lib/export.js'
 import {
   applyBacklinksPreference,
   applyStatsPreference,
@@ -22,7 +21,7 @@ import {
   setFolderSyncApply,
   setFolderSyncNotice,
   syncNow,
-} from './lib/folder-sync.js'
+} from './lib/sync.js'
 import {initMenu, initTheme, updateMenuState} from './lib/menu.js'
 import {
   applySyncedNote,
@@ -39,6 +38,7 @@ import {
   updateTitle,
 } from './lib/note.js'
 import {notify} from './lib/notify.js'
+import {readNote} from './lib/read-note.js'
 import {initShortcuts} from './lib/shortcuts.js'
 
 /**

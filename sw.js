@@ -8,7 +8,7 @@
 // from the cache before it asks the network, so a returning tab keeps the
 // index.html it installed until the name of the cache changes underneath it.
 
-const VERSION = 'v25'
+const VERSION = 'v26'
 const SHELL_CACHE = `textarea-shell-${VERSION}`
 const VENDOR_CACHE = `textarea-vendor-${VERSION}`
 // Deliberately not derived from VERSION: the model is 241 MB, and a cache
@@ -35,6 +35,7 @@ const SHELL = [
   '/lib/export.js',
   '/lib/features.js',
   '/lib/file-links.js',
+  '/lib/filename.js',
   '/lib/files.js',
   '/lib/find-panel.js',
   '/lib/find.js',
@@ -56,6 +57,7 @@ const SHELL = [
   '/lib/prefs.js',
   '/lib/qr-panel.js',
   '/lib/qr.js',
+  '/lib/read-note.js',
   '/lib/save.js',
   '/lib/settings-panel.js',
   '/lib/settings-rows.js',
@@ -66,6 +68,7 @@ const SHELL = [
   '/lib/stats.js',
   '/lib/style.js',
   '/lib/switcher.js',
+  '/lib/sync.js',
   '/lib/tasks-panel.js',
   '/lib/theme.js',
   '/lib/writing-tools.js',
