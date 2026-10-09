@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
@@ -88,6 +89,20 @@
     text-decoration: underline;
     text-underline-offset: 4px;
     text-decoration-thickness: 1px;
+  }
+
+  main {
+    display: contents;
+  }
+
+  /* Text for a screen reader only: in the accessible name, off the screen. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   article {
@@ -342,6 +357,10 @@
     text-decoration: none;
     text-align: left;
     padding: 10px 14px;
+    /* Rows keep their height and the menu scrolls. Left to shrink, twenty
+       rows on a short window were squeezed to 24px each with the last one
+       cut off - too small a target, and nothing said there was more. */
+    flex-shrink: 0;
     overflow: hidden;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
@@ -540,7 +559,7 @@
 
   .dialog-hint {
     font-size: 13px;
-    opacity: 0.55;
+    opacity: 0.64;
   }
 
   .dialog-error {
@@ -584,7 +603,7 @@
 
   .dialog input[type='search']::placeholder {
     color: var(--text);
-    opacity: 0.45;
+    opacity: 0.64;
   }
 
   .dialog input:disabled {
@@ -1031,13 +1050,13 @@
     right: 10px;
     bottom: 8px;
     font: 11px / 1.3 system-ui;
-    color: rgba(0, 0, 0, 0.55);
+    color: rgba(0, 0, 0, 0.66);
     opacity: 1;
   }
 
   .document-meta {
     font: 13px / 1.3 system-ui;
-    opacity: 0.6;
+    opacity: 0.72;
   }
 
   /* The delete control is on the paper rather than beside the card, so there
@@ -1057,7 +1076,7 @@
     border-radius: 999px;
     color: #1c1c1c;
     cursor: pointer;
-    opacity: 0.45;
+    opacity: 0.55;
     touch-action: manipulation;
   }
 
@@ -1193,7 +1212,7 @@
     padding-top: 9px;
     border-top: 1px solid var(--overlay);
     font: 12px / 1.45 system-ui;
-    opacity: 0.55;
+    opacity: 0.64;
   }
 
   /* ------------------------------------------------------ the backlinks panel */
@@ -1372,7 +1391,7 @@
   .task-row-done .task-name,
   .task-row-done .task-text {
     text-decoration: line-through;
-    opacity: 0.55;
+    opacity: 0.64;
   }
 
   .tasks-empty {
@@ -1618,6 +1637,20 @@
     width: 100%;
   }
 
+  /* A reader who asks for less motion gets none that is decoration: the
+     ripple, the menu's slide and the fades all land at once. Delays are left
+     alone, because the menu's visibility flip is timed with one. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
   @media print {
     .noprint {
       visibility: hidden !important;
@@ -1626,8 +1659,12 @@
 </style>
 <!-- role=textbox with aria-multiline is the correct mapping for a
      contenteditable element, and it needs a name to be announced at all. -->
+<!-- The landmark a screen reader jumps to. It draws no box of its own
+     (display: contents), so the article lays out exactly as it did alone. -->
+<main>
 <article contenteditable="plaintext-only" spellcheck autofocus role="textbox"
          aria-multiline="true" aria-label="Note"></article>
+</main>
 <button id="button" class="noprint" aria-label="Menu" aria-haspopup="menu"
         aria-expanded="false">
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none"

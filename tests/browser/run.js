@@ -5817,6 +5817,141 @@ test('an edit redraws only the part of the note it touched', async () => {
   assert.deepEqual(result.repeats, result.repeats.map(() => true))
 })
 
+test('axe finds no WCAG A or AA failure in either theme, on the page or in its panels', async () => {
+  // axe-core is a devDependency read off disk and evaluated through the
+  // debugger, so it never passes the Content-Security-Policy as a script of
+  // the page and never ships with it. The rule set is WCAG 2.x level A and
+  // AA - contrast, names, roles, language - with nothing switched off.
+  const axe = await fs.readFile(new URL('../../node_modules/axe-core/axe.min.js', import.meta.url), 'utf8')
+  const failures = []
+  const scan = async (where) => {
+    // Past the fades: a dialog still fading in is measured at a contrast
+    // nobody ever reads it at.
+    await page.waitForTimeout(350)
+    const violations = await page.evaluate(async () => {
+      const result = await globalThis.axe.run(document, {
+        runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']},
+        resultTypes: ['violations'],
+      })
+      return result.violations.map(
+        (violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(' ')).join(', ')}`,
+      )
+    })
+    for (const violation of violations) failures.push(`${where} - ${violation}`)
+  }
+
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(() => {
+      for (const key of ['stats', 'backlinks', 'writing', 'wikilinks', 'tasks']) {
+        localStorage.setItem(`textarea:${key}`, 'on')
+      }
+    })
+    await page.goto(`${server.origin}/?theme=${theme}`)
+    await page.waitForFunction(() => Boolean(globalThis.textarea))
+    await setNote(
+      '# Title\n\nSome **bold**, *slanted*, ~~struck~~ and `code`.\n\n' +
+        'https://example.com and mail@example.com and [[Other]]\n\n' +
+        '- [ ] a task\n- [x] done\n1. one\n\n```\nfence\n```\n',
+    )
+    await saveNow()
+    await page.evaluate(axe)
+
+    await scan(`${theme}: the note with its panels`)
+
+    // The menu and the dialogs are measured without the side panels behind
+    // them: the menu opens over the writing panel, and a target that is
+    // covered on purpose is not a target that is too small.
+    await page.evaluate(() => {
+      for (const key of ['stats', 'backlinks', 'writing']) localStorage.removeItem(`textarea:${key}`)
+    })
+    await page.reload()
+    await page.waitForFunction(() => Boolean(globalThis.textarea))
+    await page.evaluate(axe)
+    await openMenu()
+    await scan(`${theme}: the menu`)
+    await page.keyboard.press('Escape')
+
+    for (const row of ['settings', 'documents', 'export', 'encryption', 'trash']) {
+      await openMenu()
+      await page.locator(`#menu-${row}`).click()
+      await page.locator('dialog[open]').waitFor({state: 'visible'})
+      await scan(`${theme}: ${row}`)
+      await page.keyboard.press('Escape')
+      await page.locator('dialog[open]').waitFor({state: 'detached'})
+    }
+
+    await page.keyboard.press('Control+f')
+    await page.locator('.find-body').waitFor({state: 'visible'})
+    await scan(`${theme}: find`)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Control+k')
+    await page.locator('dialog[open]').waitFor({state: 'visible'})
+    await scan(`${theme}: the quick switcher`)
+    await page.keyboard.press('Escape')
+  }
+
+  // Leave the next test the profile it expects.
+  await page.evaluate(() => {
+    for (const key of ['stats', 'backlinks', 'writing', 'wikilinks', 'tasks']) {
+      localStorage.removeItem(`textarea:${key}`)
+    }
+  })
+  await page.goto(server.origin + '/')
+  await page.waitForFunction(() => Boolean(globalThis.textarea))
+
+  assert.deepEqual(failures, [])
+})
+
+test('the page says what language it is in and gives the note a landmark', async () => {
+  await freshEditor()
+  assert.equal(await page.evaluate(() => document.documentElement.lang), 'en')
+  assert.equal(await page.locator('main > article[role="textbox"]').count(), 1)
+  // The wrapper draws nothing: the article is laid out as if it were alone.
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('main')).display), 'contents')
+})
+
+test('a reader who asks for less motion gets none of the decoration', async () => {
+  await page.emulateMedia({reducedMotion: 'reduce'})
+  try {
+    await freshEditor()
+    await openMenu()
+    const longest = await page.evaluate(() => {
+      const seconds = (value) => Math.max(...value.split(',').map((part) => parseFloat(part) || 0))
+      let worst = 0
+      for (const element of document.querySelectorAll('#menu, #menu .item, #button, #notification')) {
+        const style = getComputedStyle(element)
+        worst = Math.max(worst, seconds(style.transitionDuration), seconds(style.animationDuration))
+      }
+      return worst
+    })
+    assert.ok(longest < 0.001, `no transition or animation runs, got ${longest}s`)
+    // The menu still opens and still closes: only the motion went.
+    await page.keyboard.press('Escape')
+    await page.locator('#menu').waitFor({state: 'hidden'})
+  } finally {
+    await page.emulateMedia({reducedMotion: null})
+  }
+})
+
+test('the keyboard reaches the menu from the note, and can see where it is', async () => {
+  await freshEditor()
+  await page.locator('article').focus()
+  await page.keyboard.press('Tab')
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'button')
+  const outline = await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle)
+  assert.notEqual(outline, 'none', 'the focused menu button shows a focus ring')
+  await page.keyboard.press('Enter')
+  await page.locator('#menu').waitFor({state: 'visible'})
+  await page.keyboard.press('ArrowDown')
+  const item = await page.evaluate(() => {
+    const element = document.activeElement
+    return {inMenu: Boolean(element?.closest('#menu')), outline: getComputedStyle(element).outlineStyle}
+  })
+  assert.equal(item.inMenu, true)
+  assert.notEqual(item.outline, 'none', 'the focused menu row shows a focus ring')
+  await page.keyboard.press('Escape')
+})
+
 test('a tab hidden mid-pause saves at once instead of waiting the pause out', async () => {
   await setNote('# Before')
   await saveNow()
