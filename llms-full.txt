@@ -19,6 +19,11 @@ This is a fork of [antonmedv/textarea](https://github.com/antonmedv/textarea) by
 Anton Medvedev, used under the MIT licence. Everything here that is not in that
 project is listed under [Differences from upstream](#differences-from-upstream).
 
+This repository is a rebuild of that fork (`textarea-master`): every feature
+it had, with the same storage and link formats, plus the changes listed under
+"Improvements over textarea-master" in [CHANGELOG.md](CHANGELOG.md).
+[docs/PARITY.md](docs/PARITY.md) names the test that guards each feature.
+
 <p align="center">
   <a href="https://gitguy268-textarea.vercel.app/">
     <img src=".github/textarea-my-screenshot.webp" alt="Screenshot of the editor" width="550" height="386">
@@ -54,6 +59,10 @@ project is listed under [Differences from upstream](#differences-from-upstream).
 - 🗃️ **Backup** – One press puts the whole library into a single ZIP, in Folder sync's own file format
 - 🗑️ **Trash** – A deleted note waits 30 days (7 or 90) where one click brings it back
 - ☑️ **Tasks** – `- [ ]` becomes a clickable checkbox, and a panel gathers every open task in the library
+- 🎛️ **Command palette** – Every action in one filterable list on Cmd/Ctrl+Shift+P, once switched on in Settings
+- 🎯 **Word-count goal** – Set one in Settings and the statistics panel shows how far along the note is
+- 🖨️ **Print** – On paper there is the note and nothing else, black on white
+- ♿ **Accessible** – Keyboard reachable, WCAG AA contrast in both themes, checked by axe on every test run; honours reduced motion and reduced transparency
 - 📱 **Installable** – Works offline as a progressive web app, and handles file drops
 - 💕 **Style** – Customize the look with CSS via DevTools
 
@@ -126,6 +135,9 @@ file is called — so a second stored name could only ever disagree with the fir
 If your browser refuses IndexedDB, which some private windows do, every library
 function degrades to a no-op and the editor carries on. Losing the library is a
 much smaller bug than refusing to accept text.
+
+The cards can be ordered by last edit (the default), by creation, or by
+title; the panel remembers the choice. Nothing is renamed or moved by it.
 
 ### Trash
 
@@ -218,11 +230,19 @@ the export panel's dialog asked twice, and the module itself is fetched on
 the click, so a reader who never backs up never pays for the code that writes
 one.
 
+**Write one Markdown file instead of an archive** (off as it ships) turns the
+same row into an export for reading: every note in one `.md` file, newest
+first, a rule between each, no front matter. It is never encrypted, and it is
+not the copy to restore from — a note that contains a rule of its own cannot
+be told apart from two.
+
 ### Statistics
 
 **Statistics** puts a readout in the bottom left corner that follows the note as
 you type: words, characters, characters without spaces, lines, sentences, and
-two reading estimates.
+two reading estimates. Give it a **Word-count goal** in Settings and a Goal
+row appears under Words — `312 of 500 (62%)` — and leaves again when the
+goal is cleared.
 
 The two rates are averages, not measurements, and the panel says so:
 
@@ -266,7 +286,10 @@ the engine is a vendored build of llama.cpp, and the model — Gemma 3, 270
 million parameters — is part of this repository in four chunks, each verified
 against a pinned checksum before anything loads. The first **Run** pulls those
 chunks from this deployment (about 241 MB, then cached — offline after that);
-everything before that first press fetches nothing at all. A note longer than
+everything before that first press fetches nothing at all. The panel counts
+the megabytes as they arrive and shows a **Cancel download** button while they
+do; a cancelled download costs nothing but the bytes already fetched, and the
+next Run picks up from whatever the browser cached. A note longer than
 24,000 characters is cut in plain sight and the panel says so, because a
 silent cut is the tool lying about what it worked on.
 
@@ -384,9 +407,43 @@ a note that was wearing one back on a system stack without deleting anything.
 | <kbd>Cmd/Ctrl</kbd> + <kbd>O</kbd> | Open a file |
 | <kbd>Cmd/Ctrl</kbd> + <kbd>K</kbd> | Open the quick switcher (P or E are the alternative chords) |
 | <kbd>Cmd/Ctrl</kbd> + <kbd>F</kbd> | Find and replace in the note, while its switch is on |
+| <kbd>Cmd/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> | Open the command palette, once its switch is on (it ships off) |
+| <kbd>Enter</kbd> / <kbd>Shift</kbd> + <kbd>Enter</kbd> | In the find bar: next match, previous match |
+| <kbd>Tab</kbd> | From the note to the menu button; <kbd>Enter</kbd> opens the menu |
+| <kbd>Home</kbd> <kbd>End</kbd> | First and last row of the open menu |
 | <kbd>Cmd/Ctrl</kbd> + <kbd>Z</kbd> | Undo, and <kbd>Shift</kbd> to redo |
 | <kbd>↑</kbd> <kbd>↓</kbd> | Walk the menu once it is open |
 | <kbd>Esc</kbd> | Close the menu or any panel |
+
+## Where your settings are kept
+
+Every switch is one key in this browser's `localStorage`, under the
+`textarea:` prefix. Nothing else knows about them, and clearing the site's
+data resets them all. The keys are the same ones `textarea-master` used, so a
+profile that already has settings keeps them.
+
+| Key | What it holds |
+|---|---|
+| `textarea:glass` | Liquid-glass refraction on the floating panels: `on` or `off` (on as it ships) |
+| `textarea:accent`, `textarea:font`, `textarea:note-size`, `textarea:note-leading` | Appearance |
+| `textarea:custom-fonts` | The custom-font shelf's switch |
+| `textarea:stats`, `textarea:backlinks`, `textarea:writing` | Whether each side panel was left open |
+| `textarea:word-goal` | The word-count goal, or nothing |
+| `textarea:two-columns`, `textarea:file-links`, `textarea:wikilinks`, `textarea:wikilink-create`, `textarea:tasks`, `textarea:tasks-done`, `textarea:backlink-mentions` | How notes are read and drawn |
+| `textarea:switcher`, `textarea:switcher-scope`, `textarea:switcher-shortcut` | The quick switcher |
+| `textarea:palette` | The command palette's switch (off as it ships) |
+| `textarea:find`, `textarea:find-case`, `textarea:find-words` | Find and replace |
+| `textarea:backup`, `textarea:backup-metadata`, `textarea:backup-encrypt`, `textarea:backup-single` | Backup, and whether it writes one Markdown file instead of an archive |
+| `textarea:trash`, `textarea:trash-keep` | The trash and how many days it keeps a note |
+| `textarea:library-sort` | The order of the cards in My documents |
+| `textarea:writing-instructions`, `textarea:writing-selection`, `textarea:writing-tool-<id>` | The writing tools |
+| `textarea:active-document` | Which library row this browser last edited |
+
+The notes themselves are in IndexedDB (`textarea`, with `textarea-sync`,
+`textarea-fonts` and `textarea-links` beside it) and the downloaded model is
+in the Cache API (`textarea-models`). The theme is the one setting that is
+not stored at all: it lives in the address bar as `?theme=`, so it travels
+with a shared link.
 
 ## Pro tips
 
@@ -419,7 +476,7 @@ There is nothing to install beyond the dev dependencies, and nothing to build:
 the site is plain static files, served as they are.
 
 ```sh
-npm ci            # dev dependencies (ESLint, Playwright)
+npm ci            # dev dependencies (ESLint, Playwright, axe-core)
 npm run serve     # serve the project at http://127.0.0.1:8080
 ```
 
@@ -441,6 +498,30 @@ static files at [gitguy268-textarea.vercel.app](https://gitguy268-textarea.verce
 over HTTPS — there is no build step, and no deploy runs in GitHub Actions.
 GitHub Actions runs the lint, the unit and browser suites, and a link check on
 every pull request.
+
+`node tests/perf.js` prints what the boot costs, and `node tests/perf.js 1024`
+adds the cost of one highlight on a 1 MB note; a change that claims to be
+faster names the number it moved.
+
+### Hosting the model
+
+The model is 253,114,976 bytes (241 MiB), committed as four chunks of at most
+64 MiB so that each stays under GitHub's 100 MB file limit and the app can be
+deployed straight from a clone. That is the simplest arrangement and the one
+this repository uses, at the price of a heavy clone. Two alternatives, neither
+set up here:
+
+- **Git LFS** — `git lfs track "models/*.part*"` keeps the chunks out of the
+  ordinary history. The static host must then check out LFS objects when it
+  deploys (on Vercel, the Git LFS project setting), or it will serve pointer
+  files and every chunk will fail its checksum.
+- **Release assets** — attach the chunks to a GitHub release and copy them
+  into `models/` in the deploy step. The app must still fetch them from its
+  own origin: the Content-Security-Policy allows no other, and that is
+  deliberate.
+
+Either way `models/manifest.json` stays in the repository, because its
+SHA-256 values are what the loader trusts.
 
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) is the module map and the data
 flows: which file owns the URL, the library and the folder mirror, and how a
@@ -617,6 +698,82 @@ The app ships as a single page rather than as releases, so treat "Unreleased" as
 what is on `main` right now.
 
 ## [Unreleased]
+
+### Improvements over textarea-master
+
+This repository is a rebuild of `textarea-master` at revision `a70829e`. It
+began as a byte-for-byte copy; every one of the original's 250 unit tests and
+105 browser tests is still here and passing, and
+[docs/PARITY.md](docs/PARITY.md) maps each feature to the test that guards
+it. Storage keys, database names, cache names and both link formats are
+unchanged, so existing notes, settings and links carry over. What changed:
+
+**Structure**
+
+- `app.js` was 2,850 lines holding the editor, the URL, the menu, every
+  preference and the boot. It is now a 190-line entry, and the work lives in
+  ten modules under `lib/` — `note`, `editor`, `features`, `menu`, `files`,
+  `shortcuts`, `prefs`, `settings-rows`, `notify`, `signals` — with no module
+  importing the entry and no two importing each other.
+- The thirty preference get/set pairs share one helper in `lib/prefs.js`,
+  which is unit tested; a stored value that is not one the app writes can no
+  longer flip a default.
+
+**Performance** (same machine, `node tests/perf.js 1024`)
+
+- Eager JavaScript at boot: 262.7 kB → 256.4 kB, with five features added.
+  The Settings rows are fetched with the panel instead of at boot.
+- Re-highlighting a 1 MB note: 108.1 ms → 44.0 ms (median of five). The
+  renderer used to empty the article and rebuild all of it on every
+  highlight; it now swaps only the stretch of nodes that differs.
+
+**Robustness**
+
+- A tab hidden or closed inside the 500 ms autosave pause saves at once
+  (`visibilitychange`, `pagehide`), library row first.
+- A library that stops accepting writes — a full quota, blocked storage —
+  says so once, where it used to fail silently.
+- A link is called long at three quarters of the URL limit, while it still
+  works, in addition to the existing warning past the limit.
+- The reason a writing-tools Run failed stays on screen; it used to be wiped
+  the moment the Run ended.
+
+**Accessibility**
+
+- axe-core runs in the browser suite over the note, the menu, every dialog,
+  find and the switcher, in both themes, at WCAG 2.x A and AA with no rule
+  switched off. Fixed to get there: the page declared no language; hint
+  text, placeholders and card dates were under 4.5:1 on the light theme;
+  document cards had an accessible name that did not contain their visible
+  text.
+- Menu rows keep their height and the menu scrolls. On a short window the
+  twenty rows were squeezed to 24px each and the last was cut off.
+- A `main` landmark around the note, a `prefers-reduced-motion` rule (there
+  was none), and tests for keyboard reach and visible focus.
+
+**New, each behind its own preference**
+
+- A command palette on Cmd/Ctrl+Shift+P (off as it ships) listing every
+  visible menu row, plus find and the quick switcher.
+- My documents sorts by last edit, creation or title, and remembers.
+- A word-count goal, shown in the statistics panel only when one is set.
+- Backup can write the whole library as one Markdown file.
+- A print stylesheet: the note alone, black on white, with page margins.
+  The original only hid the menu button.
+
+**Writing tools**
+
+- The model download reports progress per megabyte instead of per 64 MiB
+  chunk, and can be cancelled.
+
+**Documentation**
+
+- `textarea:glass`, the liquid-glass switch's storage key, was documented
+  nowhere outside `lib/glass.js`; the README now lists every key.
+- `docs/ARCHITECTURE.md` said a save runs "a fifth of a second" after
+  typing. The code waits 500 ms, and the document now says so.
+- The README covers the alternatives to committing the model (Git LFS,
+  release assets).
 
 ### Added
 
@@ -1071,8 +1228,18 @@ writing it yourself would not have been faster.
 
 ```
 index.html        markup, the menu, and all of the CSS
-app.js            the shell: the editor, the URL, the menu, the library autosave
+app.js            the entry: wires lib/ together, boots, exposes the test seam
 lib/              one module per concern, all pure where it can be
+  note.js           the note: the editor's text, the URL hash, the library row, the autosave
+  editor.js         the contenteditable editor and its undo stack
+  features.js       the side panels, the bars and the switches around the note
+  menu.js           the menu, its rows and the theme row
+  files.js          files coming in: the input, drag and drop, "Open with"
+  shortcuts.js      the page-wide keyboard chords
+  prefs.js          every textarea:* preference as a get/set pair, pure over localStorage
+  settings-rows.js  the rows of the Settings panel, fetched with it
+  notify.js         the notification bubble
+  signals.js        the two pieces of news the modules pass each other
   dialog.js         the <dialog> builder every panel is built from
   formats.js        note -> text/CSV/JSON/XML/RTF/LaTeX/YAML, no DOM
   export.js         reading the note out of the live page and writing a file

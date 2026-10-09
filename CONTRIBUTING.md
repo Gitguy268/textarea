@@ -71,8 +71,18 @@ writing it yourself would not have been faster.
 
 ```
 index.html        markup, the menu, and all of the CSS
-app.js            the shell: the editor, the URL, the menu, the library autosave
+app.js            the entry: wires lib/ together, boots, exposes the test seam
 lib/              one module per concern, all pure where it can be
+  note.js           the note: the editor's text, the URL hash, the library row, the autosave
+  editor.js         the contenteditable editor and its undo stack
+  features.js       the side panels, the bars and the switches around the note
+  menu.js           the menu, its rows and the theme row
+  files.js          files coming in: the input, drag and drop, "Open with"
+  shortcuts.js      the page-wide keyboard chords
+  prefs.js          every textarea:* preference as a get/set pair, pure over localStorage
+  settings-rows.js  the rows of the Settings panel, fetched with it
+  notify.js         the notification bubble
+  signals.js        the two pieces of news the modules pass each other
   dialog.js         the <dialog> builder every panel is built from
   formats.js        note -> text/CSV/JSON/XML/RTF/LaTeX/YAML, no DOM
   export.js         reading the note out of the live page and writing a file

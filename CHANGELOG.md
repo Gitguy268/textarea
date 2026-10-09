@@ -9,6 +9,82 @@ what is on `main` right now.
 
 ## [Unreleased]
 
+### Improvements over textarea-master
+
+This repository is a rebuild of `textarea-master` at revision `a70829e`. It
+began as a byte-for-byte copy; every one of the original's 250 unit tests and
+105 browser tests is still here and passing, and
+[docs/PARITY.md](docs/PARITY.md) maps each feature to the test that guards
+it. Storage keys, database names, cache names and both link formats are
+unchanged, so existing notes, settings and links carry over. What changed:
+
+**Structure**
+
+- `app.js` was 2,850 lines holding the editor, the URL, the menu, every
+  preference and the boot. It is now a 190-line entry, and the work lives in
+  ten modules under `lib/` — `note`, `editor`, `features`, `menu`, `files`,
+  `shortcuts`, `prefs`, `settings-rows`, `notify`, `signals` — with no module
+  importing the entry and no two importing each other.
+- The thirty preference get/set pairs share one helper in `lib/prefs.js`,
+  which is unit tested; a stored value that is not one the app writes can no
+  longer flip a default.
+
+**Performance** (same machine, `node tests/perf.js 1024`)
+
+- Eager JavaScript at boot: 262.7 kB → 256.4 kB, with five features added.
+  The Settings rows are fetched with the panel instead of at boot.
+- Re-highlighting a 1 MB note: 108.1 ms → 44.0 ms (median of five). The
+  renderer used to empty the article and rebuild all of it on every
+  highlight; it now swaps only the stretch of nodes that differs.
+
+**Robustness**
+
+- A tab hidden or closed inside the 500 ms autosave pause saves at once
+  (`visibilitychange`, `pagehide`), library row first.
+- A library that stops accepting writes — a full quota, blocked storage —
+  says so once, where it used to fail silently.
+- A link is called long at three quarters of the URL limit, while it still
+  works, in addition to the existing warning past the limit.
+- The reason a writing-tools Run failed stays on screen; it used to be wiped
+  the moment the Run ended.
+
+**Accessibility**
+
+- axe-core runs in the browser suite over the note, the menu, every dialog,
+  find and the switcher, in both themes, at WCAG 2.x A and AA with no rule
+  switched off. Fixed to get there: the page declared no language; hint
+  text, placeholders and card dates were under 4.5:1 on the light theme;
+  document cards had an accessible name that did not contain their visible
+  text.
+- Menu rows keep their height and the menu scrolls. On a short window the
+  twenty rows were squeezed to 24px each and the last was cut off.
+- A `main` landmark around the note, a `prefers-reduced-motion` rule (there
+  was none), and tests for keyboard reach and visible focus.
+
+**New, each behind its own preference**
+
+- A command palette on Cmd/Ctrl+Shift+P (off as it ships) listing every
+  visible menu row, plus find and the quick switcher.
+- My documents sorts by last edit, creation or title, and remembers.
+- A word-count goal, shown in the statistics panel only when one is set.
+- Backup can write the whole library as one Markdown file.
+- A print stylesheet: the note alone, black on white, with page margins.
+  The original only hid the menu button.
+
+**Writing tools**
+
+- The model download reports progress per megabyte instead of per 64 MiB
+  chunk, and can be cancelled.
+
+**Documentation**
+
+- `textarea:glass`, the liquid-glass switch's storage key, was documented
+  nowhere outside `lib/glass.js`; the README now lists every key.
+- `docs/ARCHITECTURE.md` said a save runs "a fifth of a second" after
+  typing. The code waits 500 ms, and the document now says so.
+- The README covers the alternatives to committing the model (Git LFS,
+  release assets).
+
 ### Added
 
 - **One Export panel** with four destinations: save to a file, copy to the

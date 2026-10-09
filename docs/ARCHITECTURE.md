@@ -11,18 +11,42 @@ For how to work on it, see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ```
 index.html   markup, the menu, all of the CSS, the inline icon symbols
-app.js       the shell: boot, the editor, the URL, the menu, the autosave,
-             the library claim, and the wiring that points lib/ at all three
+app.js       the entry: wires lib/ together, boots, exposes the test seam
 lib/         one module per concern
 models/      the on-device model, in transport chunks, checked before it runs
 tests/       unit tests (pure modules, under Node) and the browser suite
 vendor/      third-party code, each with its own licence, all lazy
-docs/        this file
+docs/        this file, and PARITY.md: each feature and the test that guards it
 ```
+
+What used to be one 2,850-line `app.js` is the shell, and it is these modules
+now, each importing only the ones above it in this list:
+
+```
+signals.js        on() and emit(): 'note' (the text changed or was saved) and
+                  'menu' (something a row displays moved)
+prefs.js          every textarea:* preference as a get/set pair
+editor.js         the contenteditable editor, its undo stack, debounce()
+notify.js         the notification bubble
+note.js           the note: article, editor, state, save(), load(), the
+                  library claim, the autosave and its flush, encrypted links
+features.js       the side panels, the find bar, the switcher, the command
+                  palette, and the switches that change how a note is drawn
+files.js          files coming in: the input, drag and drop, "Open with"
+menu.js           the menu, what each row says and does, the theme row
+shortcuts.js      the page-wide keyboard chords
+settings-rows.js  the rows of the Settings panel - fetched with the panel
+```
+
+The two signals are what keep that list a list. `save()` in `note.js` has
+news for four panels and the menu, all of which import `note.js`; rather than
+import them back, it emits `'note'` and `'menu'`, and `features.js` and
+`menu.js` listen. No module imports `app.js`, and no two import each other.
 
 `lib/` falls into three groups by what they are allowed to touch:
 
-- **Pure modules** — `formats.js` (note → text/CSV/JSON/XML/RTF/LaTeX/YAML),
+- **Pure modules** — `prefs.js` (the preferences and their validators),
+  `formats.js` (note → text/CSV/JSON/XML/RTF/LaTeX/YAML),
   `front-matter.js`, `stats.js`, `markdown.js`, the codecs in `share.js`,
   `switcher.js` (`filterNotes`, the quick switcher's ranking),
   `backlinks.js` (which notes reach this one), `find.js` (the match ranges,
@@ -56,17 +80,39 @@ the service worker tests pin all of that down.
 ## The Note and the URL
 
 The editor is a contenteditable article; the note's text is the source of truth
-and the rendered markup is rebuilt from it. On every input two things are
-debounced: the highlight (30ms) and the history record (300ms), and a fifth of a
-second later `save()` runs:
+and the rendered markup is derived from it. On every input two things are
+debounced: the highlight (30ms) and the history record (300ms), and half a
+second after the last keystroke `save()` runs:
 
 1. The text is encoded into the hash —
    `#<base64url(deflate-raw(text [+ "\0" + style]))>` — and the address bar is
    rewritten with `history.replaceState`, never `pushState`, so typing does not
    fill the back stack.
 2. The row is written to the library (below).
-3. The folder mirror is scheduled (`scheduleSync`), the title follows, and the
-   statistics panel updates.
+3. The folder mirror is scheduled (`scheduleSync`), the title follows, and
+   `'note'` is emitted, which is how the statistics, backlinks, tasks and
+   writing panels hear about it.
+
+The half second must never cost the last words typed, so two events cut it
+short: `visibilitychange` to hidden and `pagehide` both call `flushSave()`,
+which writes the library row first and on its own — a closing page may never
+return from the `await` that compresses the hash, but an IndexedDB write that
+has been started is finished by the browser. That early row is stamped with a
+hash no codec writes (`~`), so if the page dies before the real one is
+recorded, a tab restored on the stale URL claims a fresh row instead of
+writing the older note over the newer text.
+
+**The highlight is a patch, not a rebuild.** `parseMarkdown()` builds the
+nodes the text asks for, walks the article's children from the top and from
+the bottom for as long as each `isEqualNode()` its counterpart, and swaps only
+the stretch between. The editor hands it the new text directly instead of
+flattening the article first, so an insertion, an undo or a find-and-replace
+in a long note leaves every other node where it was. The result is node for
+node what a rebuild from nothing draws, and a browser test holds it to that.
+
+Storage that fails does not fail silently: `saveToLibrary()` reports the
+first write the library refuses (a full quota, blocked storage) in the
+notification bubble, and again only after a write has succeeded in between.
 
 `load()` does the reverse at boot: claim a row for the hash, decode it (or
 prompt for the password of a `#!` encrypted link), paint it, and save it to the
@@ -108,7 +154,7 @@ An encrypted note is `#!<base64url(header + AES-GCM ciphertext)>` — `'!'` is
 not in the base64url alphabet, so the two formats cannot be confused. The
 password never leaves the page: `share.js` does the key derivation and the
 cipher, `unlock()` asks for the password at load, and `createEncryptedLink()`
-in `app.js` replaces the address bar with the encrypted link.
+in `lib/note.js` replaces the address bar with the encrypted link.
 
 While `state.encrypted` is set, `save()` skips step 1 above — the plaintext
 never reappears in the URL behind an encrypted link. The statistics, the
@@ -256,19 +302,21 @@ stale. The install event never touches that cache.
 
 ## Boot
 
-`init()` wires the menu, the theme (which lives in the query string, so it
+`init()` in `app.js` wires the menu, the theme (which lives in the query string, so it
 survives in a shared link), drag-and-drop, the file handling, the statistics
 preference, and the folder-sync notice/apply callbacks, then asks for the
 folder back. `load()` — after `DOMContentLoaded`, since a module script is
 deferred — claims, decodes and paints the note.
 
-The boot fetches 21 modules — 263 kB to parse and eval — and `tests/perf.js`
+The boot fetches 30 modules — 256 kB to parse and eval, against the 263 kB in
+21 modules of the single-file shell this replaced — and `tests/perf.js`
 prints that graph, the load timings and the typing cost for anyone who wants
 to re-take them. The panels behind the menu entries
-a reader opens once a month, the find bar, the tasks panel, Backup, the quick
-switcher, the QR encoder, the writing tools and everything under `vendor/`
-and `models/` are imported on the click that needs them: fourteen more
-modules, 132 kB, wait behind those clicks. The startup guard test fails if
+a reader opens once a month, the Settings rows, the find bar, the tasks
+panel, Backup, the quick switcher and the command palette built on it, the
+QR encoder, the writing tools and everything under `vendor/`
+and `models/` are imported on the click that needs them: fifteen more
+modules wait behind those clicks. The startup guard test fails if
 any of the deferred files appear in a fresh load's resource timing.
 
 ## State, and Where it Is Owned
@@ -282,7 +330,8 @@ any of the deferred files appear in a fresh load's resource timing.
 | Theme | `?theme=` in the query string |
 | Appearance (accent, font, size, spacing) | `localStorage: textarea:accent` and its three siblings; a note font of `custom-…` names a font on the shelf |
 | The custom-font shelf and its switch | IndexedDB `textarea-fonts` / `fonts`; `localStorage: textarea:custom-fonts` (`'off'` is the only value that is off) |
-| Every feature switch — glass, statistics, two columns, file links, wikilinks, backlinks, the switcher, the writing tools, find, backup, trash, tasks | `localStorage: textarea:*`, read by the menu row and the Settings panel alike |
+| Every feature switch — glass (`textarea:glass`), statistics, two columns, file links, wikilinks, backlinks, the switcher, the command palette, the writing tools, find, backup, trash, tasks | `localStorage: textarea:*`, through the get/set pairs in `lib/prefs.js` (glass keeps its own in `lib/glass.js`), read by the menu row and the Settings panel alike; the README lists every key |
+| The word-count goal and the order of My documents | `localStorage: textarea:word-goal`, `textarea:library-sort` |
 | The sentence appended to every writing prompt | `localStorage: textarea:writing-instructions` |
 | The downloaded model | Cache API `textarea-models` — filled at run time, never by the install event |
 | Undo history | the `Editor` object, in the page — a reload resets it |
@@ -290,13 +339,28 @@ any of the deferred files appear in a fresh load's resource timing.
 
 ## The Test Seam
 
-`globalThis.textarea` is a deliberately small programmatic surface: the editor,
+`globalThis.textarea` is a deliberately small programmatic surface, set up in
+`app.js` and unchanged by the split: the editor,
 `save()`, `openDocument`, `readNote`, the statistics panel, `state`,
 `documentId`, and the folder-sync entry points (including `connect`, which
 takes a handle directly so tests never sit through a native picker). It exists
 for the browser suite and the console; nothing in `lib/` reads it.
 
 ## Which Test Guards Which Rule
+
+- *Nothing the original did was lost* — `docs/PARITY.md`, one line per
+  feature with the test that guards it.
+- *Accessibility* — `axe finds no WCAG A or AA failure in either theme`, over
+  the note, the menu, every dialog, find and the switcher, with no rule
+  switched off; plus the reduced-motion, landmark and keyboard-reach tests.
+- *The last words are not lost* — `a tab hidden mid-pause saves at once`, and
+  `a library that stops keeping notes says so, once`.
+- *The highlight is a patch* — `an edit redraws only the part of the note it
+  touched`, which also compares the patched tree with a rebuild from nothing.
+- *The preferences* — `tests/unit/prefs.test.js`: the shipped defaults, the
+  stored contract, and the validators.
+- *The shell is complete* — `tests/unit/sw.test.js` fails when a module in
+  `lib/` is missing from the service worker's list.
 
 - *No build, no CDN, boot stays small* — the startup guard test (no
   `vendor/`, no `/models/`, no deferred panel in a fresh load's resource

@@ -6,7 +6,7 @@
 > and there is no server.
 
 This is a fork of [antonmedv/textarea](https://github.com/antonmedv/textarea).
-The site is static — `index.html`, `app.js` and the modules under `lib/` — so
+The site is static — `index.html`, `app.js` (the entry) and the modules under `lib/` — so
 there is no API to call, no account to hold, and nothing here to authenticate
 against. Everything below is the behaviour of that one page.
 

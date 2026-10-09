@@ -9,6 +9,11 @@ This is a fork of [antonmedv/textarea](https://github.com/antonmedv/textarea) by
 Anton Medvedev, used under the MIT licence. Everything here that is not in that
 project is listed under [Differences from upstream](#differences-from-upstream).
 
+This repository is a rebuild of that fork (`textarea-master`): every feature
+it had, with the same storage and link formats, plus the changes listed under
+"Improvements over textarea-master" in [CHANGELOG.md](CHANGELOG.md).
+[docs/PARITY.md](docs/PARITY.md) names the test that guards each feature.
+
 <p align="center">
   <a href="https://gitguy268-textarea.vercel.app/">
     <img src=".github/textarea-my-screenshot.webp" alt="Screenshot of the editor" width="550" height="386">
@@ -44,6 +49,10 @@ project is listed under [Differences from upstream](#differences-from-upstream).
 - 🗃️ **Backup** – One press puts the whole library into a single ZIP, in Folder sync's own file format
 - 🗑️ **Trash** – A deleted note waits 30 days (7 or 90) where one click brings it back
 - ☑️ **Tasks** – `- [ ]` becomes a clickable checkbox, and a panel gathers every open task in the library
+- 🎛️ **Command palette** – Every action in one filterable list on Cmd/Ctrl+Shift+P, once switched on in Settings
+- 🎯 **Word-count goal** – Set one in Settings and the statistics panel shows how far along the note is
+- 🖨️ **Print** – On paper there is the note and nothing else, black on white
+- ♿ **Accessible** – Keyboard reachable, WCAG AA contrast in both themes, checked by axe on every test run; honours reduced motion and reduced transparency
 - 📱 **Installable** – Works offline as a progressive web app, and handles file drops
 - 💕 **Style** – Customize the look with CSS via DevTools
 
@@ -116,6 +125,9 @@ file is called — so a second stored name could only ever disagree with the fir
 If your browser refuses IndexedDB, which some private windows do, every library
 function degrades to a no-op and the editor carries on. Losing the library is a
 much smaller bug than refusing to accept text.
+
+The cards can be ordered by last edit (the default), by creation, or by
+title; the panel remembers the choice. Nothing is renamed or moved by it.
 
 ### Trash
 
@@ -208,11 +220,19 @@ the export panel's dialog asked twice, and the module itself is fetched on
 the click, so a reader who never backs up never pays for the code that writes
 one.
 
+**Write one Markdown file instead of an archive** (off as it ships) turns the
+same row into an export for reading: every note in one `.md` file, newest
+first, a rule between each, no front matter. It is never encrypted, and it is
+not the copy to restore from — a note that contains a rule of its own cannot
+be told apart from two.
+
 ### Statistics
 
 **Statistics** puts a readout in the bottom left corner that follows the note as
 you type: words, characters, characters without spaces, lines, sentences, and
-two reading estimates.
+two reading estimates. Give it a **Word-count goal** in Settings and a Goal
+row appears under Words — `312 of 500 (62%)` — and leaves again when the
+goal is cleared.
 
 The two rates are averages, not measurements, and the panel says so:
 
@@ -256,7 +276,10 @@ the engine is a vendored build of llama.cpp, and the model — Gemma 3, 270
 million parameters — is part of this repository in four chunks, each verified
 against a pinned checksum before anything loads. The first **Run** pulls those
 chunks from this deployment (about 241 MB, then cached — offline after that);
-everything before that first press fetches nothing at all. A note longer than
+everything before that first press fetches nothing at all. The panel counts
+the megabytes as they arrive and shows a **Cancel download** button while they
+do; a cancelled download costs nothing but the bytes already fetched, and the
+next Run picks up from whatever the browser cached. A note longer than
 24,000 characters is cut in plain sight and the panel says so, because a
 silent cut is the tool lying about what it worked on.
 
@@ -374,9 +397,43 @@ a note that was wearing one back on a system stack without deleting anything.
 | <kbd>Cmd/Ctrl</kbd> + <kbd>O</kbd> | Open a file |
 | <kbd>Cmd/Ctrl</kbd> + <kbd>K</kbd> | Open the quick switcher (P or E are the alternative chords) |
 | <kbd>Cmd/Ctrl</kbd> + <kbd>F</kbd> | Find and replace in the note, while its switch is on |
+| <kbd>Cmd/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> | Open the command palette, once its switch is on (it ships off) |
+| <kbd>Enter</kbd> / <kbd>Shift</kbd> + <kbd>Enter</kbd> | In the find bar: next match, previous match |
+| <kbd>Tab</kbd> | From the note to the menu button; <kbd>Enter</kbd> opens the menu |
+| <kbd>Home</kbd> <kbd>End</kbd> | First and last row of the open menu |
 | <kbd>Cmd/Ctrl</kbd> + <kbd>Z</kbd> | Undo, and <kbd>Shift</kbd> to redo |
 | <kbd>↑</kbd> <kbd>↓</kbd> | Walk the menu once it is open |
 | <kbd>Esc</kbd> | Close the menu or any panel |
+
+## Where your settings are kept
+
+Every switch is one key in this browser's `localStorage`, under the
+`textarea:` prefix. Nothing else knows about them, and clearing the site's
+data resets them all. The keys are the same ones `textarea-master` used, so a
+profile that already has settings keeps them.
+
+| Key | What it holds |
+|---|---|
+| `textarea:glass` | Liquid-glass refraction on the floating panels: `on` or `off` (on as it ships) |
+| `textarea:accent`, `textarea:font`, `textarea:note-size`, `textarea:note-leading` | Appearance |
+| `textarea:custom-fonts` | The custom-font shelf's switch |
+| `textarea:stats`, `textarea:backlinks`, `textarea:writing` | Whether each side panel was left open |
+| `textarea:word-goal` | The word-count goal, or nothing |
+| `textarea:two-columns`, `textarea:file-links`, `textarea:wikilinks`, `textarea:wikilink-create`, `textarea:tasks`, `textarea:tasks-done`, `textarea:backlink-mentions` | How notes are read and drawn |
+| `textarea:switcher`, `textarea:switcher-scope`, `textarea:switcher-shortcut` | The quick switcher |
+| `textarea:palette` | The command palette's switch (off as it ships) |
+| `textarea:find`, `textarea:find-case`, `textarea:find-words` | Find and replace |
+| `textarea:backup`, `textarea:backup-metadata`, `textarea:backup-encrypt`, `textarea:backup-single` | Backup, and whether it writes one Markdown file instead of an archive |
+| `textarea:trash`, `textarea:trash-keep` | The trash and how many days it keeps a note |
+| `textarea:library-sort` | The order of the cards in My documents |
+| `textarea:writing-instructions`, `textarea:writing-selection`, `textarea:writing-tool-<id>` | The writing tools |
+| `textarea:active-document` | Which library row this browser last edited |
+
+The notes themselves are in IndexedDB (`textarea`, with `textarea-sync`,
+`textarea-fonts` and `textarea-links` beside it) and the downloaded model is
+in the Cache API (`textarea-models`). The theme is the one setting that is
+not stored at all: it lives in the address bar as `?theme=`, so it travels
+with a shared link.
 
 ## Pro tips
 
@@ -409,7 +466,7 @@ There is nothing to install beyond the dev dependencies, and nothing to build:
 the site is plain static files, served as they are.
 
 ```sh
-npm ci            # dev dependencies (ESLint, Playwright)
+npm ci            # dev dependencies (ESLint, Playwright, axe-core)
 npm run serve     # serve the project at http://127.0.0.1:8080
 ```
 
@@ -431,6 +488,30 @@ static files at [gitguy268-textarea.vercel.app](https://gitguy268-textarea.verce
 over HTTPS — there is no build step, and no deploy runs in GitHub Actions.
 GitHub Actions runs the lint, the unit and browser suites, and a link check on
 every pull request.
+
+`node tests/perf.js` prints what the boot costs, and `node tests/perf.js 1024`
+adds the cost of one highlight on a 1 MB note; a change that claims to be
+faster names the number it moved.
+
+### Hosting the model
+
+The model is 253,114,976 bytes (241 MiB), committed as four chunks of at most
+64 MiB so that each stays under GitHub's 100 MB file limit and the app can be
+deployed straight from a clone. That is the simplest arrangement and the one
+this repository uses, at the price of a heavy clone. Two alternatives, neither
+set up here:
+
+- **Git LFS** — `git lfs track "models/*.part*"` keeps the chunks out of the
+  ordinary history. The static host must then check out LFS objects when it
+  deploys (on Vercel, the Git LFS project setting), or it will serve pointer
+  files and every chunk will fail its checksum.
+- **Release assets** — attach the chunks to a GitHub release and copy them
+  into `models/` in the deploy step. The app must still fetch them from its
+  own origin: the Content-Security-Policy allows no other, and that is
+  deliberate.
+
+Either way `models/manifest.json` stays in the repository, because its
+SHA-256 values are what the loader trusts.
 
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) is the module map and the data
 flows: which file owns the URL, the library and the folder mirror, and how a

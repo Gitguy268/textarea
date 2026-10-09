@@ -39,7 +39,7 @@ questions local ones:
   that widens either of those, or that introduces a request, should be treated
   as a security change.
 - Anything that lets one note overwrite or read another within the same origin.
-  Two tabs are meant to stay separate; the in-memory row tracking in `app.js` is
+  Two tabs are meant to stay separate; the in-memory row tracking in `lib/note.js` is
   what keeps that true.
 - Anything that makes encryption weaker than it claims: a reduced PBKDF2
   iteration count, an unencrypted fallback, a password written to storage or a
