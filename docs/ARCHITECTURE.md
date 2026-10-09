@@ -314,7 +314,7 @@ preference, and the folder-sync notice/apply callbacks, then asks for the
 folder back. `load()` — after `DOMContentLoaded`, since a module script is
 deferred — claims, decodes and paints the note.
 
-The boot fetches 30 modules — 256 kB to parse and eval, against the 263 kB in
+The boot fetches 30 modules — 258 kB to parse and eval, against the 263 kB in
 21 modules of the single-file shell this replaced — and `tests/perf.js`
 prints that graph, the load timings and the typing cost for anyone who wants
 to re-take them. The panels behind the menu entries

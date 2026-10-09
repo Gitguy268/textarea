@@ -31,9 +31,9 @@ unchanged, so existing notes, settings and links carry over. What changed:
 
 **Performance** (same machine, `node tests/perf.js 1024`)
 
-- Eager JavaScript at boot: 262.7 kB → 256.4 kB, with five features added.
+- Eager JavaScript at boot: 262.7 kB → 258.5 kB, with five features added.
   The Settings rows are fetched with the panel instead of at boot.
-- Re-highlighting a 1 MB note: 108.1 ms → 44.0 ms (median of five). The
+- Re-highlighting a 1 MB note: 108.1 ms → 44.4 ms (median of five). The
   renderer used to empty the article and rebuild all of it on every
   highlight; it now swaps only the stretch of nodes that differs.
 
