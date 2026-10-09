@@ -237,3 +237,73 @@ test('a missing chunk names itself instead of failing as a whole', async () => {
     await assert.rejects(loadEngine(), /tiny\.part1 could not be fetched \(404\)/)
   })
 })
+
+test('a download says how far along it is, a megabyte at a time', async () => {
+  // Three megabytes in one chunk, handed over in quarter-megabyte reads the
+  // way a network hands them over.
+  const size = 3_000_000
+  const body = new Uint8Array(size).fill(7)
+  const manifest = {
+    totalSize: size,
+    chunks: [{path: 'big.part1', size, sha256: createHash('sha256').update(body).digest('hex')}],
+  }
+  const original = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith('manifest.json')) return new Response(JSON.stringify(manifest))
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          for (let at = 0; at < size; at += 250_000) controller.enqueue(body.subarray(at, at + 250_000))
+          controller.close()
+        },
+      }),
+    )
+  }
+  const log = []
+  try {
+    await assert.rejects(loadEngine({onProgress: (message) => log.push(message)}))
+  } finally {
+    globalThis.fetch = original
+  }
+  assert.deepEqual(log, [
+    'Reading the model manifest…',
+    'Fetching model… 0 MB of 3 MB',
+    'Fetching model… 1 MB of 3 MB',
+    'Fetching model… 2 MB of 3 MB',
+    'Fetching model… 3 MB of 3 MB',
+    'Fetching model… 3 MB of 3 MB',
+    'Preparing the model…',
+  ])
+})
+
+test('a cancelled download rejects as an abort, and the next load starts over', async () => {
+  const manifest = tinyManifest()
+  const original = globalThis.fetch
+  let asked = 0
+  // A fetch that honours its signal the way the real one does.
+  globalThis.fetch = async (url, {signal} = {}) => {
+    asked++
+    if (String(url).endsWith('manifest.json')) return new Response(JSON.stringify(manifest))
+    return new Promise((resolve, reject) => {
+      if (!signal) return resolve(new Response('hello'))
+      signal.addEventListener('abort', () => reject(signal.reason))
+    })
+  }
+  try {
+    const abort = new AbortController()
+    const first = loadEngine({signal: abort.signal})
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    abort.abort()
+    await assert.rejects(first, {name: 'AbortError'})
+
+    // Forgotten, not remembered as a failure: a second load asks again and
+    // gets as far as the first one would have.
+    const before = asked
+    const log = []
+    await assert.rejects(loadEngine({onProgress: (message) => log.push(message)}))
+    assert.ok(asked > before, 'the manifest and the chunk were asked for again')
+    assert.equal(log.at(-1), 'Preparing the model…')
+  } finally {
+    globalThis.fetch = original
+  }
+})

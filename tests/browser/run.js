@@ -6152,6 +6152,61 @@ test('on paper there is the note and nothing else', async () => {
   }
 })
 
+test('a model download can be cancelled, and cancelling is not an error', async () => {
+  await page.evaluate(async () => {
+    const {createWritingTools} = await import('/lib/writing-tools.js')
+    const panel = createWritingTools({
+      // A download that never finishes on its own: only the signal ends it,
+      // the way the real loader's fetch ends.
+      ensureModel: (onProgress, signal) =>
+        new Promise((resolve, reject) => {
+          if (globalThis.__modelBroken) return reject(new Error('part2 failed its checksum'))
+          onProgress('Fetching model… 12 MB of 253 MB')
+          signal.addEventListener('abort', () => reject(signal.reason))
+        }),
+      getText: () => 'Some words to work on.',
+      getTools: () => ['improve'],
+      getInstructions: () => '',
+      onReplace: () => {},
+    })
+    panel.element.id = 'cancel-probe'
+    document.body.append(panel.element)
+    panel.open()
+  })
+  const probe = page.locator('#cancel-probe')
+  try {
+    const cancel = probe.getByRole('button', {name: 'Cancel download'})
+    assert.equal(await cancel.isHidden(), true, 'nothing to cancel before a Run')
+
+    await probe.locator('.writing-run').click()
+    await cancel.waitFor({state: 'visible'})
+    assert.match(await probe.locator('.writing-status').textContent(), /12 MB of 253 MB/)
+
+    await cancel.click()
+    await cancel.waitFor({state: 'hidden'})
+    const status = probe.locator('.writing-status')
+    assert.match(await status.textContent(), /Download cancelled/)
+    assert.equal(await status.evaluate((element) => element.classList.contains('error')), false)
+    // And the panel is ready for another go.
+    assert.equal(await probe.locator('.writing-run').isDisabled(), false)
+
+    // A load that fails for a real reason says why, in red, and keeps saying
+    // it once the Run is over.
+    await page.evaluate(() => {
+      globalThis.__modelBroken = true
+    })
+    await probe.locator('.writing-run').click()
+    await until(() => document.querySelector('#cancel-probe .writing-status').classList.contains('error'))
+    assert.match(await status.textContent(), /failed its checksum/)
+    assert.equal(await probe.locator('.writing-run').isDisabled(), false)
+  } finally {
+    await page.evaluate(() => {
+      delete globalThis.__modelBroken
+      document.querySelector('#cancel-probe')?.remove()
+    })
+  }
+})
+
 test('a tab hidden mid-pause saves at once instead of waiting the pause out', async () => {
   await setNote('# Before')
   await saveNow()
