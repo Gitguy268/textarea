@@ -5774,6 +5774,49 @@ test('folder sync: a second tab waits for the pass already running', async () =>
 // it and none below. It sat mid-file while sixteen folder sync tests grew
 // underneath it, its comment calling it "the last test in the suite" - so new
 // tests go above this, never after it.
+test('an edit redraws only the part of the note it touched', async () => {
+  const note = '# Title\n\n**bold** one\n\n`code` two\n\n*slanted* three\n\n~~struck~~ four'
+  await setNote(note)
+
+  const result = await page.evaluate(async (text) => {
+    const {parseMarkdown} = await import('/lib/markdown.js')
+    const {article, editor} = globalThis.textarea
+    const rebuilt = (value) => {
+      const scratch = document.createElement('article')
+      parseMarkdown(scratch, {}, value)
+      return scratch.innerHTML
+    }
+    const report = {}
+
+    // An insertion in the middle: the nodes above and below are the very
+    // same objects afterwards, not equal copies of them.
+    const before = [...article.childNodes]
+    const at = text.indexOf('two')
+    editor.select(at, at)
+    editor.insert('2 and ')
+    const after = [...article.childNodes]
+    report.text = article.textContent
+    report.headKept = after[0] === before[0] && after[1] === before[1] && after[2] === before[2]
+    report.tailKept = after.at(-1) === before.at(-1) && after.at(-2) === before.at(-2)
+    report.sameAsRebuild = article.innerHTML === rebuilt(article.textContent)
+
+    // A run of identical lines is the case a careless two-ended match gets
+    // wrong: growing and shrinking it must still land on the rebuilt tree.
+    report.repeats = []
+    for (const value of ['**a**', '**a****a**', '**a**', '', '- x\n- x', '- x\n- x\n- x', '- x', text]) {
+      editor.replace(value)
+      report.repeats.push(article.textContent === value && article.innerHTML === rebuilt(value))
+    }
+    return report
+  }, note)
+
+  assert.equal(result.text, note.replace('two', '2 and two'))
+  assert.equal(result.headKept, true, 'the nodes above the edit were left in place')
+  assert.equal(result.tailKept, true, 'the nodes below the edit were left in place')
+  assert.equal(result.sameAsRebuild, true, 'the patched tree is the tree a full rebuild draws')
+  assert.deepEqual(result.repeats, result.repeats.map(() => true))
+})
+
 test('a tab hidden mid-pause saves at once instead of waiting the pause out', async () => {
   await setNote('# Before')
   await saveNow()
