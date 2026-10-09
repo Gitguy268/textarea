@@ -819,6 +819,16 @@
     cursor: pointer;
   }
 
+  .dialog-sort {
+    align-self: flex-end;
+    font: 13px / 1.3 system-ui;
+    color: inherit;
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--text) 28%, transparent);
+    border-radius: 8px;
+    padding: 4px 8px;
+  }
+
   .settings-controls select {
     font: inherit;
     color: inherit;
@@ -1651,9 +1661,49 @@
     }
   }
 
+  /* Paper: the note and nothing else, black on white whatever the theme,
+     with the margins the printer's own page has rather than the screen's
+     centred column. Everything that floats over the note is taken out of
+     the flow, not just made invisible, so no blank page is printed for it. */
   @media print {
-    .noprint {
-      visibility: hidden !important;
+    @page {
+      margin: 2cm;
+    }
+
+    html {
+      background: #fff !important;
+      --text: #000;
+      --link: #000;
+    }
+
+    .noprint,
+    #menu,
+    #button,
+    #notification,
+    #drop-overlay,
+    dialog,
+    aside {
+      display: none !important;
+    }
+
+    article {
+      padding: 0;
+      min-height: 0;
+      font-size: 12pt;
+      color: #000;
+    }
+
+    /* A heading is not left alone at the foot of a page, and a line of code
+       or a list item is not cut in half across two. */
+    article .md-h1,
+    article .md-h2,
+    article .md-h3 {
+      break-after: avoid;
+    }
+
+    article .md-codeblock,
+    article .md-li {
+      break-inside: avoid;
     }
   }
 </style>

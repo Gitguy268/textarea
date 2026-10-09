@@ -122,3 +122,12 @@ test('a nonsense duration is zero rather than NaN', () => {
   assert.equal(formatDuration(Infinity), '0 sec')
   assert.equal(formatDuration(-5), '0 sec')
 })
+
+test('a goal is progress towards it, and no goal is nothing to print', async () => {
+  const {goalProgress} = await import('../../lib/stats.js')
+  assert.equal(goalProgress(120, 0), '')
+  assert.equal(goalProgress(0, 500), '0 of 500 (0%)')
+  assert.equal(goalProgress(499, 500), '499 of 500 (99%)')
+  assert.equal(goalProgress(500, 500), '500 of 500 (100%)')
+  assert.equal(goalProgress(750, 500), '750 of 500 (150%)')
+})

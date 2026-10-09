@@ -15,7 +15,7 @@ const prefs = await import('../../lib/prefs.js')
 test('every switch ships the way the original shipped it', () => {
   store.clear()
   const on = ['twoColumnsEnabled', 'fileLinksEnabled', 'wikiCreateEnabled', 'switcherEnabled', 'findEnabled', 'backupEnabled', 'backupMetadata', 'trashEnabled']
-  const off = ['wikilinksEnabled', 'tasksEnabled', 'tasksDoneEnabled', 'statsPreferred', 'backlinksPreferred', 'backlinkMentionsEnabled', 'writingPreferred', 'selectionToolsEnabled', 'findCase', 'findWords', 'backupEncrypt', 'paletteEnabled']
+  const off = ['wikilinksEnabled', 'tasksEnabled', 'tasksDoneEnabled', 'statsPreferred', 'backlinksPreferred', 'backlinkMentionsEnabled', 'writingPreferred', 'selectionToolsEnabled', 'findCase', 'findWords', 'backupEncrypt', 'backupSingleFile', 'paletteEnabled']
   for (const name of on) assert.equal(prefs[name](), true, name)
   for (const name of off) assert.equal(prefs[name](), false, name)
   assert.equal(prefs.switcherShortcut(), 'k')

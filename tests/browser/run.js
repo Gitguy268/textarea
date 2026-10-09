@@ -5952,6 +5952,206 @@ test('the keyboard reaches the menu from the note, and can see where it is', asy
   await page.keyboard.press('Escape')
 })
 
+test('the command palette is off until asked for, then lists the menu and runs a row', async () => {
+  await freshEditor()
+  const palette = page.locator('dialog.dialog-switcher[aria-label="Command palette"]')
+
+  // Off as it ships: the chord is the browser's, and nothing is built.
+  await page.keyboard.press('Control+Shift+P')
+  await page.waitForTimeout(150)
+  assert.equal(await palette.count(), 0)
+
+  await page.evaluate(() => localStorage.setItem('textarea:palette', 'on'))
+  try {
+    await page.keyboard.press('Control+Shift+P')
+    await palette.waitFor({state: 'visible'})
+    await palette.locator('[role="option"]').first().waitFor()
+
+    // Every visible menu row is in the list, under the label the menu shows,
+    // and so are the two features that live on a chord instead of a row.
+    const listed = await palette.locator('.switcher-name').allTextContents()
+    const rows = await page.evaluate(() =>
+      [...document.querySelectorAll('#menu .item:not([hidden])')].map((row) =>
+        row.textContent.trim().replace(/\s+/g, ' '),
+      ),
+    )
+    assert.ok(rows.length > 10, 'the menu has its rows')
+    for (const row of rows) assert.ok(listed.includes(row), `${row} is offered`)
+    assert.ok(listed.includes('Find and replace'))
+    assert.ok(listed.includes('Jump to a note'))
+    // Its ids are its own, so it can share the page with the note switcher.
+    assert.equal(await palette.locator('[role="listbox"]').getAttribute('id'), 'palette-list')
+
+    // Typing narrows it, Enter runs what is left: the Export panel opens.
+    await page.keyboard.type('expor')
+    assert.deepEqual(await palette.locator('.switcher-name').allTextContents(), ['Export'])
+    await page.keyboard.press('Enter')
+    await page.locator('dialog.dialog[aria-label="Export"]').waitFor({state: 'visible'})
+    assert.equal(await palette.isVisible(), false)
+    await page.keyboard.press('Escape')
+
+    // The chord closes it as well as opens it.
+    await page.keyboard.press('Control+Shift+P')
+    await palette.waitFor({state: 'visible'})
+    await page.keyboard.press('Control+Shift+P')
+    await palette.waitFor({state: 'hidden'})
+  } finally {
+    await page.evaluate(() => localStorage.removeItem('textarea:palette'))
+  }
+})
+
+test('the documents panel sorts by edit, by creation and by title, and remembers which', async () => {
+  await page.evaluate(async () => {
+    const library = await import('/lib/library.js')
+    // created and updated disagree on purpose, so each order is its own.
+    await library.putDocument({id: 'sort-b', title: 'banana', text: '# banana', created: 300, updated: 100})
+    await library.putDocument({id: 'sort-a', title: 'Apple', text: '# Apple', created: 100, updated: 300})
+    await library.putDocument({id: 'sort-c', title: 'cherry 10', text: '# cherry 10', created: 200, updated: 200})
+  })
+  const titles = async () => {
+    const all = await page.locator('dialog.dialog-library .document-title').allTextContents()
+    return all.filter((title) => /^(Apple|banana|cherry 10)$/.test(title))
+  }
+  try {
+    await openMenu()
+    await page.locator('#menu-documents').click()
+    const panel = page.locator('dialog.dialog-library')
+    await panel.locator('.document-title').first().waitFor()
+    const order = panel.getByLabel('Sort notes by')
+    assert.equal(await order.inputValue(), 'updated', 'the order it always had is the one it opens in')
+    assert.deepEqual(await titles(), ['Apple', 'cherry 10', 'banana'])
+
+    // The list is redrawn after a library read, so the new order is waited
+    // for rather than read on the next line.
+    const settled = async (expected) => {
+      for (let tries = 0; tries < 100; tries++) {
+        if ((await titles()).join() === expected.join()) break
+        await page.waitForTimeout(40)
+      }
+      assert.deepEqual(await titles(), expected)
+    }
+    await order.selectOption('created')
+    await settled(['banana', 'cherry 10', 'Apple'])
+
+    await order.selectOption('title')
+    await settled(['Apple', 'banana', 'cherry 10'])
+    assert.equal(await page.evaluate(() => localStorage.getItem('textarea:library-sort')), 'title')
+
+    // Closed and opened again, it is still by title.
+    await page.keyboard.press('Escape')
+    await panel.waitFor({state: 'detached'})
+    await openMenu()
+    await page.locator('#menu-documents').click()
+    await panel.locator('.document-title').first().waitFor()
+    assert.equal(await panel.getByLabel('Sort notes by').inputValue(), 'title')
+    await page.keyboard.press('Escape')
+  } finally {
+    await page.evaluate(() => localStorage.removeItem('textarea:library-sort'))
+  }
+})
+
+test('a word-count goal shows in the statistics only once one is set', async () => {
+  await setNote('one two three four five')
+  await openMenu()
+  await page.locator('#menu-stats').click()
+  const stats = page.locator('#stats-panel')
+  await stats.waitFor({state: 'visible'})
+  assert.equal(await stats.locator('dd[data-key="goal"]').count(), 0, 'no goal, no row')
+
+  try {
+    // Set where the reader sets it: the line under Statistics in Settings.
+    await openMenu()
+    await page.locator('#menu-settings').click()
+    const settings = page.locator('dialog.dialog-settings')
+    await settings.waitFor({state: 'visible'})
+    const goal = settings.getByLabel('Word-count goal (leave empty for none)')
+    await goal.fill('20')
+    await goal.dispatchEvent('change')
+    await page.keyboard.press('Escape')
+    await settings.waitFor({state: 'detached'})
+    assert.equal(await page.evaluate(() => localStorage.getItem('textarea:word-goal')), '20')
+
+    const row = stats.locator('dd[data-key="goal"]')
+    await row.waitFor({state: 'visible'})
+    assert.equal(await row.textContent(), '5 of 20 (25%)')
+    // It follows the note like every other row.
+    await setNote('one two three four five six seven eight nine ten')
+    await saveNow()
+    assert.equal(await row.textContent(), '10 of 20 (50%)')
+
+    // A goal that is not a number is no goal, and the row leaves.
+    await page.evaluate(() => localStorage.setItem('textarea:word-goal', 'plenty'))
+    await saveNow()
+    assert.equal(await row.isHidden(), true)
+  } finally {
+    await page.evaluate(() => localStorage.removeItem('textarea:word-goal'))
+  }
+})
+
+test('Backup can write the whole library as one Markdown file instead', async () => {
+  await page.evaluate(async () => {
+    const library = await import('/lib/library.js')
+    await library.putDocument({id: 'md-1', title: 'First', text: '# First\n\nalpha', updated: 2000})
+    await library.putDocument({id: 'md-2', title: 'Second', text: '# Second\n\nbeta\n', updated: 1000})
+    localStorage.setItem('textarea:backup-single', 'on')
+  })
+  try {
+    await openMenu()
+    let path = null
+    let name = null
+    const message = await notification(async () => {
+      const [download] = await Promise.all([
+        page.waitForEvent('download', {timeout: 60_000}),
+        page.locator('#menu-backup').click(),
+      ])
+      name = download.suggestedFilename()
+      path = join(DOWNLOADS, name)
+      await download.saveAs(path)
+    })
+    assert.match(name, /^textarea-notes-\d{4}-\d{2}-\d{2}\.md$/)
+    assert.match(message.text, /in one Markdown file/)
+    const written = await fs.readFile(path, 'utf8')
+    // The note on screen is the empty one the reset left, so it adds nothing.
+    assert.equal(written, '# First\n\nalpha\n\n---\n\n# Second\n\nbeta\n')
+  } finally {
+    await page.evaluate(() => localStorage.removeItem('textarea:backup-single'))
+  }
+})
+
+test('on paper there is the note and nothing else', async () => {
+  await setNote('# Printed\n\nbody')
+  await openMenu()
+  await page.locator('#menu-stats').click()
+  await page.locator('#stats-panel').waitFor({state: 'visible'})
+  await page.emulateMedia({media: 'print'})
+  try {
+    const printed = await page.evaluate(() => {
+      const shown = (selector) => getComputedStyle(document.querySelector(selector)).display !== 'none'
+      const article = getComputedStyle(document.querySelector('article'))
+      return {
+        button: shown('#button'),
+        menu: shown('#menu'),
+        stats: shown('#stats-panel'),
+        bubble: shown('#notification'),
+        padding: article.paddingLeft,
+        color: article.color,
+        page: getComputedStyle(document.documentElement).backgroundColor,
+      }
+    })
+    assert.deepEqual(printed, {
+      button: false,
+      menu: false,
+      stats: false,
+      bubble: false,
+      padding: '0px',
+      color: 'rgb(0, 0, 0)',
+      page: 'rgb(255, 255, 255)',
+    })
+  } finally {
+    await page.emulateMedia({media: null})
+  }
+})
+
 test('a tab hidden mid-pause saves at once instead of waiting the pause out', async () => {
   await setNote('# Before')
   await saveNow()

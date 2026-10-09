@@ -37,3 +37,20 @@ test('every library and trash call degrades to a no-op without storage', async (
   assert.equal(await emptyTrash(), false)
   assert.equal(await purgeTrash(86_400_000), 0, 'nothing purged, nothing thrown')
 })
+
+test('the documents panel orders notes three ways without touching the list it was given', async () => {
+  const {sortNotes} = await import('../../lib/library-panel.js')
+  const stored = [
+    {title: 'banana', created: 3},
+    {title: 'Apple', created: 1},
+    {title: 'cherry 10', created: 2},
+    {title: 'cherry 9', created: 0},
+  ]
+  const titles = (entries) => entries.map((entry) => entry.title)
+  assert.equal(sortNotes(stored, 'updated'), stored, 'the stored order is handed straight back')
+  assert.equal(sortNotes(stored, 'nonsense'), stored)
+  assert.deepEqual(titles(sortNotes(stored, 'created')), ['banana', 'cherry 10', 'Apple', 'cherry 9'])
+  // Case does not sort capitals first, and 9 comes before 10.
+  assert.deepEqual(titles(sortNotes(stored, 'title')), ['Apple', 'banana', 'cherry 9', 'cherry 10'])
+  assert.deepEqual(titles(stored), ['banana', 'Apple', 'cherry 10', 'cherry 9'])
+})

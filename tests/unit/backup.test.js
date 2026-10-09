@@ -58,3 +58,15 @@ test('an empty library is an empty list, not an error', () => {
 test('the archive is named for the day it was taken', () => {
   assert.equal(backupFilename(new Date('2026-10-09T15:04:05Z')), 'textarea-backup-2026-10-09.zip')
 })
+
+test('the library as one Markdown file is its notes with a rule between', async () => {
+  const {libraryAsMarkdown, libraryFilename} = await import('../../lib/backup.js')
+  assert.equal(libraryAsMarkdown([]), '')
+  assert.equal(libraryAsMarkdown([{text: '# One\n\nbody\n\n'}]), '# One\n\nbody\n')
+  // An empty note adds no rule of its own.
+  assert.equal(
+    libraryAsMarkdown([{text: '# One'}, {text: '   '}, {text: '# Two\n'}]),
+    '# One\n\n---\n\n# Two\n',
+  )
+  assert.equal(libraryFilename(new Date('2026-10-09T23:30:00Z')), 'textarea-notes-2026-10-09.md')
+})
