@@ -1956,6 +1956,7 @@ test('startup: panels rarely opened are fetched when their entry is used', async
     'qr.js',
     'file-links.js',
     'settings-panel.js',
+    'settings-rows.js',
     'backlinks-panel.js',
     'backlinks.js',
     'switcher.js',

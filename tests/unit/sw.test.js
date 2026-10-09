@@ -153,3 +153,15 @@ test('offline, a navigation falls back to the cached shell', async () => {
   const missing = await fire('fetch', {url: 'https://textarea.local/lib/not-there.js'})
   assert.equal(missing.type, 'error', 'an uncached asset offline fails as a response, not an exception')
 })
+
+test('the shell lists every module in lib/, and nothing that is not there', async () => {
+  // A module the split adds and the shell forgets works online and fails on
+  // the first offline reload - the one place nobody is looking.
+  const {readdir} = await import('node:fs/promises')
+  const onDisk = (await readdir(new URL('../../lib/', import.meta.url)))
+    .filter((name) => name.endsWith('.js'))
+    .map((name) => `/lib/${name}`)
+    .sort()
+  const listed = [...source.matchAll(/'(\/lib\/[^']+)'/g)].map((match) => match[1]).sort()
+  assert.deepEqual(listed, onDisk)
+})
