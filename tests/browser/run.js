@@ -6253,6 +6253,31 @@ test('a tab hidden mid-pause saves at once instead of waiting the pause out', as
     return false
   })
   assert.equal(closed, true, 'pagehide flushed the save as well')
+
+  // And the real thing: a second tab closed in the same breath as its last
+  // keystroke. No code of its own runs after the close, so only a write the
+  // closing page had already issued can put these words in the library.
+  const second = await context.newPage()
+  await second.goto(server.origin + '/')
+  await second.waitForFunction(() => Boolean(globalThis.textarea))
+  await second.evaluate(async () => {
+    globalThis.textarea.editor.replace('# First draft')
+    await globalThis.textarea.save()
+  })
+  // Typed with the keyboard into a focused editor, because that is the case
+  // that matters: closing a focused tab blurs the editor first, and the blur
+  // starts an ordinary save that the closing page never finishes.
+  await second.locator('article').click()
+  await second.keyboard.press('Control+End')
+  await second.keyboard.type(', and the words typed as the tab closed')
+  await second.close({runBeforeUnload: true})
+  await until(
+    async () => {
+      const entries = await (await import('/lib/library.js')).listDocuments()
+      return entries.some((entry) => entry.text === '# First draft, and the words typed as the tab closed')
+    },
+    {what: 'the closed tab\u2019s last words to be in the library'},
+  )
 })
 
 test('a library that stops keeping notes says so, once', async () => {

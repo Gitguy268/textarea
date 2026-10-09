@@ -729,8 +729,10 @@ unchanged, so existing notes, settings and links carry over. What changed:
 
 **Robustness**
 
-- A tab hidden or closed inside the 500 ms autosave pause saves at once
-  (`visibilitychange`, `pagehide`), library row first.
+- A tab hidden or closed inside the 500 ms autosave pause no longer loses
+  what was typed in it: the library row is written and committed in the same
+  turn as `pagehide` / `visibilitychange`, which the browser finishes after
+  the page is gone. Tested by really closing a tab mid-keystroke.
 - A library that stops accepting writes — a full quota, blocked storage —
   says so once, where it used to fail silently.
 - A link is called long at three quarters of the URL limit, while it still

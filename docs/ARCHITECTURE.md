@@ -94,13 +94,19 @@ second after the last keystroke `save()` runs:
    writing panels hear about it.
 
 The half second must never cost the last words typed, so two events cut it
-short: `visibilitychange` to hidden and `pagehide` both call `flushSave()`,
-which writes the library row first and on its own — a closing page may never
-return from the `await` that compresses the hash, but an IndexedDB write that
-has been started is finished by the browser. That early row is stamped with a
-hash no codec writes (`~`), so if the page dies before the real one is
-recorded, a tab restored on the stale URL claims a fresh row instead of
-writing the older note over the newer text.
+short: `visibilitychange` to hidden and `pagehide` both call `flushSave()`.
+A closing page never comes back from an `await`, and the ordinary save has
+three of them (compress, read the row, write it), so the flush first writes
+the library row with `putDocumentNow()`: one `put` and an explicit
+`commit()` issued in the same turn of the event loop, on a connection that
+is already open. That is the only kind of write the browser still finishes
+once the page is gone. The row is stamped with a hash no codec writes (`~`),
+so a tab restored on the stale URL claims a fresh row instead of writing the
+older note over the newer text. The ordinary save is then started as well,
+for the tab that was only hidden. `save()` marks the note clean when it
+finishes, not when it starts: closing a focused tab blurs the editor first,
+and a blur-save that had already called the note clean would tell the flush
+there was nothing to do.
 
 **The highlight is a patch, not a rebuild.** `parseMarkdown()` builds the
 nodes the text asks for, walks the article's children from the top and from
