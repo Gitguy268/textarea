@@ -35,6 +35,10 @@ features.js       the side panels, the find bar, the switcher, the command
 files.js          files coming in: the input, drag and drop, "Open with"
 menu.js           the menu, what each row says and does, the theme row
 shortcuts.js      the page-wide keyboard chords
+sync.js           folder sync as the app sees it: the same calls, with the
+                  engine (folder-sync.js) fetched only when there is a folder
+filename.js       a title made safe to be a filename
+read-note.js      the note as every exporter takes it
 settings-rows.js  the rows of the Settings panel - fetched with the panel
 ```
 
@@ -102,7 +106,11 @@ the library row with `putDocumentNow()`: one `put` and an explicit
 is already open. That is the only kind of write the browser still finishes
 once the page is gone. The row is stamped with a hash no codec writes (`~`),
 so a tab restored on the stale URL claims a fresh row instead of writing the
-older note over the newer text. The ordinary save is then started as well,
+older note over the newer text - and when that tab is a reload or a restored
+session rather than a link opened fresh, `load()` reopens the marked row
+itself, so the reader is back where they were with one note, not two. An
+encrypted link is never replaced this way: the library's copy is plaintext
+and the password has not been asked for. The ordinary save is then started as well,
 for the tab that was only hidden. `save()` marks the note clean when it
 finishes, not when it starts: closing a focused tab blurs the editor first,
 and a blur-save that had already called the note clean would tell the flush
@@ -314,15 +322,23 @@ preference, and the folder-sync notice/apply callbacks, then asks for the
 folder back. `load()` — after `DOMContentLoaded`, since a module script is
 deferred — claims, decodes and paints the note.
 
-The boot fetches 30 modules — 258 kB to parse and eval, against the 263 kB in
+The boot fetches 25 modules — 182 kB to parse and eval, against the 263 kB in
 21 modules of the single-file shell this replaced — and `tests/perf.js`
 prints that graph, the load timings and the typing cost for anyone who wants
 to re-take them. The panels behind the menu entries
 a reader opens once a month, the Settings rows, the find bar, the tasks
 panel, Backup, the quick switcher and the command palette built on it, the
 QR encoder, the writing tools and everything under `vendor/`
-and `models/` are imported on the click that needs them: fifteen more
-modules wait behind those clicks. The startup guard test fails if
+and `models/` are imported on the click that needs them. So are the file
+readers (`open.js`, `pdf.js`, `pdf-layout.js`, `zip.js`), which arrive with
+the first file opened; the export formats (`export.js`, `formats.js`,
+`save.js`), with the first export; and the folder-sync engine. That last
+one sits behind `lib/sync.js`: at boot it asks the browser whether a
+`textarea-sync` database exists at all - never on a browser that cannot
+sync to a folder - and fetches the engine only if a folder is remembered.
+Every action on the folder waits for that question to be answered first, so
+a disconnect cannot arrive ahead of an engine that is still loading.
+`node tests/perf.js` lists every module that waits behind a click. The startup guard test fails if
 any of the deferred files appear in a fresh load's resource timing.
 
 ## State, and Where it Is Owned
@@ -363,6 +379,11 @@ for the browser suite and the console; nothing in `lib/` reads it.
   `a library that stops keeping notes says so, once`.
 - *The highlight is a patch* — `an edit redraws only the part of the note it
   touched`, which also compares the patched tree with a rebuild from nothing.
+- *Other engines* — the same suite under `BROWSER=firefox` and
+  `BROWSER=webkit`; `chromiumOnly()` in `tests/browser/run.js` names the
+  tests that cannot run there.
+- *Folder sync stays out of the way* — `a reader who never asked for folder
+  sync never loads it, and gets no database for it`.
 - *The preferences* — `tests/unit/prefs.test.js`: the shipped defaults, the
   stored contract, and the validators.
 - *The shell is complete* — `tests/unit/sw.test.js` fails when a module in

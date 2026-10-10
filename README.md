@@ -478,11 +478,14 @@ npm run check     # lint, then syntax-check every file
 npm test          # unit tests, pure modules under Node
 npm run test:browser   # Playwright against the real app
 npm run test:all  # all of it, in the order CI runs them
+npm run test:browsers  # the browser suite again, under Firefox and WebKit
 npm run check:model   # press Run against the real shipped model (outside the gate)
 ```
 
 The first `test:browser` run downloads Chromium (`npx playwright install
-chromium`). Deploys come from pushes to `main`: [Vercel](https://vercel.com/) is
+chromium`; add `firefox webkit` for `test:browsers`). Chromium is the gate;
+under the other two engines the tests of Chromium-only features — folder
+sync, the file pickers, the clipboard permission — are skipped by name. Deploys come from pushes to `main`: [Vercel](https://vercel.com/) is
 connected to this repository through its Git integration, and it publishes the
 static files at [gitguy268-textarea.vercel.app](https://gitguy268-textarea.vercel.app/)
 over HTTPS — there is no build step, and no deploy runs in GitHub Actions.

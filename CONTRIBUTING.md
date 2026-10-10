@@ -83,6 +83,9 @@ lib/              one module per concern, all pure where it can be
   settings-rows.js  the rows of the Settings panel, fetched with it
   notify.js         the notification bubble
   signals.js        the two pieces of news the modules pass each other
+  sync.js           folder sync as the app calls it; fetches folder-sync.js only when a folder exists
+  filename.js       a title made safe to be a filename, pure
+  read-note.js      the note as every exporter takes it
   dialog.js         the <dialog> builder every panel is built from
   formats.js        note -> text/CSV/JSON/XML/RTF/LaTeX/YAML, no DOM
   export.js         reading the note out of the live page and writing a file

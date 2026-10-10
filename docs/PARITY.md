@@ -109,3 +109,6 @@ Not parity, but held to the same standard: each has a test.
 - [x] Library as one Markdown file — U: `backup.test.js`; B: *Backup can write the whole library as one Markdown file instead*
 - [x] Print stylesheet — B: *on paper there is the note and nothing else*
 - [x] Model download progress and cancel — U: `gemma.test.js`; B: *a model download can be cancelled, and cancelling is not an error*
+- [x] Lazy file readers, export formats and sync engine — B: *startup: panels rarely opened are fetched when their entry is used*, *a reader who never asked for folder sync never loads it, and gets no database for it*
+- [x] A returning tab reopens its unfinished text — B: *a tab that closed mid-keystroke reopens on what was typed, without a second copy*
+- [x] Firefox and WebKit — the whole suite under `BROWSER=firefox` / `BROWSER=webkit`

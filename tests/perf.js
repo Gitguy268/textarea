@@ -181,12 +181,33 @@ async function measureTyping(origin, size) {
     return {median: cycles[2], worst: cycles[cycles.length - 1], handler}
   })
 
+  // A keystroke is not a replace: the browser changes one text node in
+  // place and the highlighter then runs over a document that is already
+  // drawn. One character goes into the middle of the note, the way a key
+  // puts it there, and the highlight that follows is timed on its own.
+  const keystroke = await page.evaluate(async () => {
+    const {parseMarkdown} = await import('/lib/markdown.js')
+    const article = document.querySelector('article')
+    const cycles = []
+    for (let i = 0; i < 5; i++) {
+      const nodes = [...article.childNodes].filter((node) => node.nodeType === Node.TEXT_NODE)
+      const node = nodes[Math.floor(nodes.length / 2)]
+      node.insertData(Math.floor(node.length / 2), 'x')
+      const start = performance.now()
+      parseMarkdown(article, {})
+      cycles.push(performance.now() - start)
+    }
+    cycles.sort((a, b) => a - b)
+    return {median: cycles[2], worst: cycles[cycles.length - 1]}
+  })
+
   await browser.close()
   const sizeKb = Buffer.byteLength(note) / 1024
   return [
     `Typing on a ${sizeKb.toFixed(0)} kB note`,
     `  replace + highlight   ${ms(samples.median)} (median of 5, worst ${ms(samples.worst)})`,
     `  input handler         ${ms(samples.handler)}`,
+    `  keystroke highlight   ${ms(keystroke.median)} (median of 5, worst ${ms(keystroke.worst)})`,
   ]
 }
 

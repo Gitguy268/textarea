@@ -22,20 +22,28 @@ unchanged, so existing notes, settings and links carry over. What changed:
 
 - `app.js` was 2,850 lines holding the editor, the URL, the menu, every
   preference and the boot. It is now a 190-line entry, and the work lives in
-  ten modules under `lib/` — `note`, `editor`, `features`, `menu`, `files`,
-  `shortcuts`, `prefs`, `settings-rows`, `notify`, `signals` — with no module
-  importing the entry and no two importing each other.
+  thirteen modules under `lib/` — `note`, `editor`, `features`, `menu`,
+  `files`, `shortcuts`, `prefs`, `settings-rows`, `notify`, `signals`, `sync`,
+  `filename`, `read-note` — with no module importing the entry and no two
+  importing each other.
 - The thirty preference get/set pairs share one helper in `lib/prefs.js`,
   which is unit tested; a stored value that is not one the app writes can no
   longer flip a default.
 
 **Performance** (same machine, `node tests/perf.js 1024`)
 
-- Eager JavaScript at boot: 262.7 kB → 258.5 kB, with five features added.
-  The Settings rows are fetched with the panel instead of at boot.
-- Re-highlighting a 1 MB note: 108.1 ms → 44.4 ms (median of five). The
+- Eager JavaScript at boot: 262.7 kB → 182.1 kB, with five features added.
+  A session that only types no longer parses the PDF and ZIP readers, the
+  nine export formats, the Settings rows or the folder-sync engine: each
+  arrives with the first file opened, the first export, the Settings panel,
+  or a folder that is remembered or being connected.
+- Re-highlighting a 1 MB note: 108.1 ms → 42.4 ms (median of five). The
   renderer used to empty the article and rebuild all of it on every
   highlight; it now swaps only the stretch of nodes that differs.
+- `tests/perf.js` also times the highlight after a single keystroke, which
+  is what typing actually costs: 36.4 ms on that 1 MB note, almost all of it
+  re-reading the text. The note is still parsed whole on every pause; at
+  that size it is two frames, and it was left alone.
 
 **Robustness**
 
@@ -43,6 +51,9 @@ unchanged, so existing notes, settings and links carry over. What changed:
   what was typed in it: the library row is written and committed in the same
   turn as `pagehide` / `visibilitychange`, which the browser finishes after
   the page is gone. Tested by really closing a tab mid-keystroke.
+- A tab that comes back after closing that way — a reload, a restored
+  session — reopens on the text it had, in the same library row, rather than
+  on the older text in its URL with the newer text left as a second note.
 - A library that stops accepting writes — a full quota, blocked storage —
   says so once, where it used to fail silently.
 - A link is called long at three quarters of the URL limit, while it still
@@ -62,6 +73,13 @@ unchanged, so existing notes, settings and links carry over. What changed:
   twenty rows were squeezed to 24px each and the last was cut off.
 - A `main` landmark around the note, a `prefers-reduced-motion` rule (there
   was none), and tests for keyboard reach and visible focus.
+
+**Other browsers**
+
+- The browser suite runs under Firefox and WebKit as well as Chromium
+  (`npm run test:browsers`, and a CI matrix): 94 and 93 tests pass, with the
+  tests of Chromium-only features skipped by name. The original was only
+  ever run in Chromium.
 
 **New, each behind its own preference**
 
