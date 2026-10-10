@@ -103,12 +103,18 @@ A closing page never comes back from an `await`, and the ordinary save has
 three of them (compress, read the row, write it), so the flush first writes
 the library row with `putDocumentNow()`: one `put` and an explicit
 `commit()` issued in the same turn of the event loop, on a connection that
-is already open. That is the only kind of write the browser still finishes
-once the page is gone. The row is stamped with a hash no codec writes (`~`),
+is already open. That is the kind of write a browser still finishes once the
+page is gone: closing a focused tab mid-keystroke twenty times kept the last
+words twenty times in each of Chromium, Firefox and WebKit. The row is stamped with a hash no codec writes (`~`),
 so a tab restored on the stale URL claims a fresh row instead of writing the
-older note over the newer text - and when that tab is a reload or a restored
-session rather than a link opened fresh, `load()` reopens the marked row
-itself, so the reader is back where they were with one note, not two. An
+older note over the newer text. The row also records the address it was
+typed under (`from`), and when a page load is a tab coming back on that same
+address - a reload is the case that is tested; a restored session should
+report itself the same way, but that is the browser's to say - `load()`
+reopens the marked row itself, so the reader is back where they were with one
+note, not two. The address matters because the row id in hand is shared by
+every tab of the origin: without it, another tab reloading would open this
+one's unfinished note. An
 encrypted link is never replaced this way: the library's copy is plaintext
 and the password has not been asked for. The ordinary save is then started as well,
 for the tab that was only hidden. `save()` marks the note clean when it

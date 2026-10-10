@@ -744,9 +744,12 @@ unchanged, so existing notes, settings and links carry over. What changed:
   what was typed in it: the library row is written and committed in the same
   turn as `pagehide` / `visibilitychange`, which the browser finishes after
   the page is gone. Tested by really closing a tab mid-keystroke.
-- A tab that comes back after closing that way — a reload, a restored
-  session — reopens on the text it had, in the same library row, rather than
-  on the older text in its URL with the newer text left as a second note.
+  Twenty real closes kept the last words twenty times in each of Chromium,
+  Firefox and WebKit.
+- A tab that comes back on the same address after closing that way reopens
+  on the text it had, in the same library row, rather than on the older text
+  in its URL with the newer text left as a second note. Verified on reload;
+  a restored session depends on the browser reporting itself as one.
 - A library that stops accepting writes — a full quota, blocked storage —
   says so once, where it used to fail silently.
 - A link is called long at three quarters of the URL limit, while it still
