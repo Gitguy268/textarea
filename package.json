@@ -12,6 +12,7 @@
     "llms-full": "node tests/llms.js",
     "test": "node --test tests/unit/",
     "test:browser": "node --test --test-concurrency=1 tests/browser/run.js",
+    "test:browsers": "BROWSER=firefox npm run test:browser && BROWSER=webkit npm run test:browser",
     "test:all": "npm run check && npm test && npm run test:browser"
   },
   "devDependencies": {

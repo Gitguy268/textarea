@@ -10,7 +10,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {test} from 'node:test'
 
-import {chromium} from 'playwright'
+import {chromium, firefox, webkit} from 'playwright'
 
 import {listen} from '../serve.js'
 import {makeLayoutPdf, makePdf} from '../fixtures/make-pdf.js'
@@ -34,10 +34,32 @@ let consoleErrors = []
  */
 let emptyHash = ''
 
+/**
+ * The engine under test: Chromium unless BROWSER says firefox or webkit.
+ * Chromium is the gate; the other two are run to find what only they break.
+ */
+const ENGINE_NAME = ['firefox', 'webkit'].includes(process.env.BROWSER) ? process.env.BROWSER : 'chromium'
+const ENGINE = {chromium, firefox, webkit}[ENGINE_NAME]
+
+/**
+ * A test of something only Chromium has - folder sync, the file pickers, the
+ * clipboard permission the harness grants, the SVG backdrop filter. Under
+ * Chromium it is an ordinary test; under the other engines it is skipped by
+ * name rather than left to fail, so a red run there means something real.
+ */
+const chromiumOnly = ENGINE_NAME === 'chromium' ? test : test.skip
+
+/**
+ * A test whose harness, not its subject, stops at WebKit: Playwright's
+ * WebKit does not hand a cross-origin fetch to page.route(), so a test that
+ * answers GitHub from a stub cannot be run there.
+ */
+const notWebkit = ENGINE_NAME === 'webkit' ? test.skip : test
+
 test.before(async () => {
   await fs.mkdir(DOWNLOADS, {recursive: true})
   server = await listen(0)
-  browser = await chromium.launch()
+  browser = await ENGINE.launch()
   context = await browser.newContext({acceptDownloads: true})
 
   // The real File System Access API opens a native dialog that no automation can
@@ -793,7 +815,7 @@ test('the editor and the menu button have accessible names', async () => {
   assert.equal(await trigger.getAttribute('aria-expanded'), 'false')
 })
 
-test('copying the link says so when the clipboard refuses', async () => {
+chromiumOnly('copying the link says so when the clipboard refuses', async () => {
   await setNote('something worth sharing')
   await page.waitForFunction((empty) => location.hash.length > 1 && location.hash !== empty, emptyHash)
 
@@ -1073,7 +1095,7 @@ test('google: in the note is a link to the search results', async () => {
   assert.equal(calls.opened[0][0], calls.href)
 })
 
-test('a local file can be linked from the menu and opened from the note', async () => {
+chromiumOnly('a local file can be linked from the menu and opened from the note', async () => {
   // The picker opens a native dialog no automation can dismiss, so it is
   // replaced with a stand-in that hands over a real handle from this
   // origin's private storage - a real one, because the store has to survive
@@ -1181,7 +1203,7 @@ test('a local file can be linked from the menu and opened from the note', async 
   }
 })
 
-test('a file link the browser will not re-admit says so and opens nothing', async () => {
+chromiumOnly('a file link the browser will not re-admit says so and opens nothing', async () => {
   await setNote('[secret.txt](file:5)')
 
   // A refused permission is not something the harness can provoke for real,
@@ -1236,7 +1258,7 @@ test('a file link the browser will not re-admit says so and opens nothing', asyn
   }
 })
 
-test('a link to a file this browser never held says so', async () => {
+chromiumOnly('a link to a file this browser never held says so', async () => {
   await setNote('[gone.txt](file:999)')
 
   const message = await notification(() => page.locator('article a.md-file').click())
@@ -1245,7 +1267,7 @@ test('a link to a file this browser never held says so', async () => {
   assert.equal(await noteText(), '[gone.txt](file:999)', 'the note is untouched')
 })
 
-test('the file links switch hides the action and stops rendering the token', async () => {
+chromiumOnly('the file links switch hides the action and stops rendering the token', async () => {
   await setNote('[budget](file:3)')
 
   // The default: the switch is on, the action is offered, the token is a link.
@@ -1843,7 +1865,7 @@ test('the Export panel offers four destinations and names the button for each', 
   await dialog.waitFor({state: 'detached'})
 })
 
-test('Copy puts the converted note on the clipboard in one click', async () => {
+chromiumOnly('Copy puts the converted note on the clipboard in one click', async () => {
   // A context of its own: the main one has no clipboard permission on purpose,
   // because another test asserts what happens when the browser refuses.
   const owned = await clipboardContext()
@@ -2366,7 +2388,7 @@ test('the two column toggle flips and persists', async () => {
   )
 })
 
-test('the glass row switches the refraction on the floating panels', async () => {
+chromiumOnly('the glass row switches the refraction on the floating panels', async () => {
   const filters = () =>
     page.evaluate(() => document.querySelectorAll('filter[id^="lg-filter"]').length)
   const menuAlpha = () =>
@@ -2468,7 +2490,7 @@ test('the glass row switches the refraction on the floating panels', async () =>
   await page.locator('#menu').waitFor({state: 'hidden'})
 })
 
-test("the settings panel carries the menu's switches and writes the same preferences", async () => {
+chromiumOnly("the settings panel carries the menu's switches and writes the same preferences", async () => {
   // The panel is the whole picture of what the menu carries, so it starts
   // from the shipped default rather than whatever the last test left.
   await page.evaluate(() => localStorage.removeItem('textarea:file-links'))
@@ -2702,7 +2724,7 @@ test('a custom font file joins the note fonts, applies, survives a reload, and c
   await page.evaluate(() => localStorage.removeItem('textarea:font'))
 })
 
-test('a font can be imported from a public GitHub link, and only from GitHub', async () => {
+notWebkit('a font can be imported from a public GitHub link, and only from GitHub', async () => {
   // The shelf starts empty, as the upload test left it.
   await page.evaluate(async () => {
     const fonts = await import('/lib/fonts.js')
@@ -4699,7 +4721,7 @@ test('the model is fetched on demand and cached, never precached', async () => {
   assert.ok(!shell.some((path) => path.startsWith('/models/')))
 })
 
-test('uses the File System Access API when the browser offers it', async () => {
+chromiumOnly('uses the File System Access API when the browser offers it', async () => {
   const stubbed = await context.newPage()
   await stubbed.addInitScript(() => {
     // Stand in for the picker: record what was asked for and what was written.
@@ -5038,7 +5060,7 @@ async function releaseGate() {
   })
 }
 
-test('folder sync: connecting adopts the folder and writes the notes into it', async () => {
+chromiumOnly('folder sync: connecting adopts the folder and writes the notes into it', async () => {
   const rig = await syncRig()
   await rig.open()
 
@@ -5073,7 +5095,7 @@ test('folder sync: connecting adopts the folder and writes the notes into it', a
   assert.ok(onDisk.length >= 3, `nothing in the folder was removed: ${onDisk.join(', ')}`)
 })
 
-test('folder sync: an edit in the app lands in the file, an edit in the file lands in the note', async () => {
+chromiumOnly('folder sync: an edit in the app lands in the file, an edit in the file lands in the note', async () => {
   const rig = await syncRig()
   await rig.open()
   await currentNoteStored()
@@ -5116,7 +5138,7 @@ test('folder sync: an edit in the app lands in the file, an edit in the file lan
   assert.deepEqual(again, {written: 0, imported: 0, removed: 0})
 })
 
-test('folder sync: syncing now cancels the pause that was scheduled', async () => {
+chromiumOnly('folder sync: syncing now cancels the pause that was scheduled', async () => {
   const rig = await syncRig()
   await rig.open()
   await currentNoteStored()
@@ -5140,7 +5162,7 @@ test('folder sync: syncing now cancels the pause that was scheduled', async () =
   await rig.disconnect()
 })
 
-test('folder sync: the menu row says how the mirror is going', async () => {
+chromiumOnly('folder sync: the menu row says how the mirror is going', async () => {
   const rig = await syncRig()
   await rig.open()
   await currentNoteStored()
@@ -5182,7 +5204,7 @@ test('folder sync: the menu row says how the mirror is going', async () => {
   await rig.disconnect()
 })
 
-test('folder sync: a pass that fails says so out loud and keeps saying so', async () => {
+chromiumOnly('folder sync: a pass that fails says so out loud and keeps saying so', async () => {
   const rig = await syncRig()
   await rig.open()
   await currentNoteStored()
@@ -5220,7 +5242,7 @@ test('folder sync: a pass that fails says so out loud and keeps saying so', asyn
   await rig.disconnect()
 })
 
-test('folder sync: the menu offers a sync now that says what it did', async () => {
+chromiumOnly('folder sync: the menu offers a sync now that says what it did', async () => {
   const rig = await syncRig()
   await rig.open()
   await currentNoteStored()
@@ -5271,7 +5293,7 @@ test('folder sync: the menu offers a sync now that says what it did', async () =
   await rig.disconnect()
 })
 
-test('folder sync: a folder remembered from the last session asks for it back', async () => {
+chromiumOnly('folder sync: a folder remembered from the last session asks for it back', async () => {
   const rig = await syncRig()
   await rig.open()
   await currentNoteStored()
@@ -5338,7 +5360,7 @@ test('folder sync: a folder remembered from the last session asks for it back', 
   assert.equal(after, null, 'a stopped folder does not come back on its own')
 })
 
-test('folder sync: a remembered folder that is not allowed says so and keeps its name', async () => {
+chromiumOnly('folder sync: a remembered folder that is not allowed says so and keeps its name', async () => {
   const rig = await syncRig()
   await rig.open()
   await currentNoteStored()
@@ -5420,7 +5442,7 @@ test('folder sync: a remembered folder that is not allowed says so and keeps its
   await rig.disconnect()
 })
 
-test('folder sync: a hand-mangled front matter block still lands as a note', async () => {
+chromiumOnly('folder sync: a hand-mangled front matter block still lands as a note', async () => {
   const rig = await syncRig()
   await rig.disconnect()
   await rig.open()
@@ -5457,7 +5479,7 @@ test('folder sync: a hand-mangled front matter block still lands as a note', asy
   await rig.disconnect()
 })
 
-test('folder sync: an emptied library takes the folder files with it', async () => {
+chromiumOnly('folder sync: an emptied library takes the folder files with it', async () => {
   const rig = await syncRig()
   await rig.disconnect()
   await rig.open()
@@ -5488,7 +5510,7 @@ test('folder sync: an emptied library takes the folder files with it', async () 
   await rig.disconnect()
 })
 
-test('folder sync: a file deleted in the Finder takes its note along', async () => {
+chromiumOnly('folder sync: a file deleted in the Finder takes its note along', async () => {
   const rig = await syncRig()
   await rig.open()
   await currentNoteStored()
@@ -5519,7 +5541,7 @@ test('folder sync: a file deleted in the Finder takes its note along', async () 
   assert.deepEqual(await rig.names(), [])
 })
 
-test('folder sync: deleting in the panel deletes the file, and stopping keeps the files', async () => {
+chromiumOnly('folder sync: deleting in the panel deletes the file, and stopping keeps the files', async () => {
   const rig = await syncRig()
   await rig.open()
   await currentNoteStored()
@@ -5577,7 +5599,7 @@ test('folder sync: deleting in the panel deletes the file, and stopping keeps th
   assert.deepEqual(after.sort(), before.sort(), 'a stopped sync writes nothing')
 })
 
-test('folder sync: an oversized file is left untouched and the pass carries on', async () => {
+chromiumOnly('folder sync: an oversized file is left untouched and the pass carries on', async () => {
   const rig = await syncRig()
   await rig.open()
 
@@ -5616,7 +5638,7 @@ test('folder sync: an oversized file is left untouched and the pass carries on',
   await rig.disconnect()
 })
 
-test('folder sync: a deletion queued mid-pass is not resurrected by that pass', async () => {
+chromiumOnly('folder sync: a deletion queued mid-pass is not resurrected by that pass', async () => {
   const rig = await syncRig()
   await rig.disconnect()
   await rig.open()
@@ -5660,7 +5682,7 @@ test('folder sync: a deletion queued mid-pass is not resurrected by that pass', 
   assert.ok(!manifest[id], `the slot is gone too: ${JSON.stringify(manifest)}`)
 })
 
-test('folder sync: a pass held across a disconnect cannot commit over the new folder', async () => {
+chromiumOnly('folder sync: a pass held across a disconnect cannot commit over the new folder', async () => {
   const rig = await syncRig()
   await rig.disconnect()
   await rig.open()
@@ -5710,7 +5732,7 @@ test('folder sync: a pass held across a disconnect cannot commit over the new fo
   )
 })
 
-test('folder sync: a second tab waits for the pass already running', async () => {
+chromiumOnly('folder sync: a second tab waits for the pass already running', async () => {
   const rig = await syncRig()
   await rig.disconnect()
   await rig.open()
@@ -5967,7 +5989,9 @@ test('a reader who asks for less motion gets none of the decoration', async () =
 test('the keyboard reaches the menu from the note, and can see where it is', async () => {
   await freshEditor()
   await page.locator('article').focus()
-  await page.keyboard.press('Tab')
+  // Safari keeps plain Tab for form fields and gives buttons to Option+Tab,
+  // unless the reader has turned full keyboard access on.
+  await page.keyboard.press(ENGINE_NAME === 'webkit' ? 'Alt+Tab' : 'Tab')
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'button')
   const outline = await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle)
   assert.notEqual(outline, 'none', 'the focused menu button shows a focus ring')
@@ -6297,7 +6321,7 @@ test('a tab that closed mid-keystroke reopens on what was typed, without a secon
   )
 })
 
-test('a reader who never asked for folder sync never loads it, and gets no database for it', async () => {
+chromiumOnly('a reader who never asked for folder sync never loads it, and gets no database for it', async () => {
   // A profile of its own: every other test here shares one, and one of them
   // has connected a folder in it.
   const fresh = await context.browser().newContext()
@@ -6445,7 +6469,22 @@ test('nothing logged an error along the way', () => {
   const noise = consoleErrors.filter(
     (message) =>
       // Aborted downloads are expected when the anchor fallback races the test.
-      !/net::ERR_ABORTED|Failed to load resource/.test(message),
+      !/net::ERR_ABORTED|Failed to load resource/.test(message) &&
+      // Outside Chromium, two things the vendored zip library does are logged
+      // by the engine itself and are not the app's: it tries its WebAssembly
+      // build from a data: URL, which the Content-Security-Policy refuses on
+      // purpose (it then runs its JavaScript build), and its worker reports
+      // the wrong passwords and oversized archives these tests hand it on
+      // purpose. Chromium logs neither, so the gate there is what it was.
+      !(
+        ENGINE_NAME !== 'chromium' &&
+        /data:application\/wasm|Failed to read data from the ReadableStream/.test(message)
+      ) &&
+      // Firefox logs an IndexedDB transaction that a reload cut short, and no
+      // handler in the page can stop it: the page it would run in is gone.
+      // The save a closing tab starts is exactly such a transaction, by
+      // design, so under Firefox that one line is the sound of it working.
+      !(ENGINE_NAME === 'firefox' && /^\[JavaScript Error: "AbortError: The operation was aborted\. "\]$/.test(message)),
   )
   assert.deepEqual(noise, [], 'the console should be clean')
 })
