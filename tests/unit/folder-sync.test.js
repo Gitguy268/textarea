@@ -19,6 +19,7 @@ import {
   MAX_SYNC_TOTAL_BYTES,
   gather,
   planSync,
+  removalBrake,
   setFolderSyncNotice,
 } from '../../lib/folder-sync.js'
 import {parseNote, renderNote} from '../../lib/front-matter.js'
@@ -538,4 +539,33 @@ test('an oversized file is announced once, not on every pass', async () => {
       `one notice per name per connection: ${JSON.stringify(notices)}`,
     )
   })
+})
+
+test('the brake leaves one deletion alone and stops a pass that removes a lot', () => {
+  const tracked = (count) =>
+    Object.fromEntries(Array.from({length: count}, (_, i) => [`n${i}`, {name: `${i}.md`, updated: 1, fileUpdated: 1}]))
+  const removeNotes = (count) => ({actions: Array.from({length: count}, (_, i) => ({type: 'remove-note', id: `n${i}`}))})
+  const removeFiles = (count) => ({actions: Array.from({length: count}, (_, i) => ({type: 'remove-file', name: `${i}.md`}))})
+
+  assert.equal(removalBrake({actions: [{type: 'write'}]}, tracked(40)), null, 'nothing removed')
+  assert.equal(removalBrake(removeNotes(1), tracked(1)), null, 'the only note, one file deleted')
+  assert.equal(removalBrake(removeNotes(1), tracked(3)), null)
+  assert.equal(removalBrake(removeNotes(2), tracked(40)), null, 'under the minimum')
+  assert.equal(removalBrake(removeNotes(3), tracked(40)), null, 'under the share')
+
+  assert.deepEqual(removalBrake(removeNotes(2), tracked(2)), {notes: 2, files: 0, tracked: 2}, 'everything')
+  assert.deepEqual(removalBrake(removeNotes(10), tracked(40)), {notes: 10, files: 0, tracked: 40}, 'a quarter')
+  assert.deepEqual(removalBrake(removeFiles(40), tracked(40)), {notes: 0, files: 40, tracked: 40}, 'an emptied library')
+})
+
+test('an empty-looking folder plans every removal, and the brake catches exactly that plan', () => {
+  const entries = [entry({id: 'a', title: 'A'}), entry({id: 'b', title: 'B'}), entry({id: 'c', title: 'C'})]
+  const manifest = {
+    a: {name: 'A.md', updated: 1, fileUpdated: 1},
+    b: {name: 'B.md', updated: 1, fileUpdated: 1},
+    c: {name: 'C.md', updated: 1, fileUpdated: 1},
+  }
+  const plan = planSync({entries, files: [], manifest})
+  assert.deepEqual(types(plan), ['remove-note', 'remove-note', 'remove-note'])
+  assert.deepEqual(removalBrake(plan, manifest), {notes: 3, files: 0, tracked: 3})
 })

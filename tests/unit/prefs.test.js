@@ -22,8 +22,12 @@ test('every switch ships the way the original shipped it', () => {
   assert.equal(prefs.switcherScope(), 'titles')
   assert.equal(prefs.trashKeep(), '30')
   assert.equal(prefs.librarySort(), 'updated')
+  assert.equal(prefs.tagsEnabled(), true, 'new, and on: a tag drawn in colour changes no note')
+  assert.equal(prefs.libraryView(), 'board')
+  assert.deepEqual(prefs.savedFilters(), [])
   assert.equal(prefs.wordGoal(), 0)
   assert.equal(prefs.writingInstructions(), '')
+  assert.equal(prefs.speechLanguage(), null, 'unchosen: the panel starts on the browser’s language')
   assert.equal(prefs.writingToolEnabled('improve'), true)
 })
 
@@ -76,4 +80,23 @@ test('storage that throws costs the reader nothing but the memory', () => {
   } finally {
     globalThis.localStorage = real
   }
+})
+
+test('saved filters come back as short names and queries, whatever was stored', () => {
+  assert.deepEqual(prefs.filtersOf('not json'), [])
+  assert.deepEqual(prefs.filtersOf('{"name":"x","query":"y"}'), [], 'a list or nothing')
+  assert.deepEqual(
+    prefs.filtersOf(JSON.stringify([{name: ' Work ', query: ' #work '}, {name: '', query: 'x'}, {name: 'x'}, null, 7])),
+    [{name: 'Work', query: '#work'}],
+  )
+  assert.equal(prefs.filtersOf(JSON.stringify(Array.from({length: 30}, (_, i) => ({name: 'n' + i, query: 'q'})))).length, 20)
+  assert.equal(prefs.filtersOf(JSON.stringify([{name: 'n'.repeat(99), query: 'q'.repeat(999)}]))[0].name.length, 40)
+
+  store.clear()
+  prefs.setSavedFilters([{name: 'Work', query: '#work', extra: true}])
+  assert.equal(store.get('textarea:filters'), '[{"name":"Work","query":"#work"}]')
+  assert.deepEqual(prefs.savedFilters(), [{name: 'Work', query: '#work'}])
+
+  assert.equal(prefs.viewOf('timeline'), 'timeline')
+  assert.equal(prefs.viewOf('anything else'), 'board')
 })

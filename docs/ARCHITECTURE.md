@@ -53,7 +53,9 @@ import them back, it emits `'note'` and `'menu'`, and `features.js` and
   `formats.js` (note → text/CSV/JSON/XML/RTF/LaTeX/YAML),
   `front-matter.js`, `stats.js`, `markdown.js`, the codecs in `share.js`,
   `switcher.js` (`filterNotes`, the quick switcher's ranking),
-  `backlinks.js` (which notes reach this one), `find.js` (the match ranges,
+  `backlinks.js` (which notes reach this one), `filter.js` (what a query in
+  My documents means: tags, days, pins, the archive, the tag counts and the
+  calendar's days), `find.js` (the match ranges,
   the walk and the one-pass replace-all), the pure half of `fonts.js`
   (the signature sniff, the family and id shapes, and `rawGitHubUrl`, the
   host check the policy depends on), `writing-tools.js`'s `buildPrompt` (what
@@ -72,11 +74,13 @@ import them back, it emits `'note'` and `'menu'`, and `features.js` and
   fetched on the click), the other half of `fonts.js` (the shelf's own
   database, and `FontFace` as the browser's verdict on the bytes),
   `pdf.js` + `pdf-layout.js` (pdf.js behind a dynamic import), `zip.js`,
-  `gemma.js` (the on-device model: verify the chunks, then run them).
+  `gemma.js` (the on-device model: verify the chunks, then run them),
+  `whisper.js` + `whisper-worker.js` (the speech model, in a worker).
 
 Dependencies point one way: `app.js` imports `lib/`, `lib/` imports `lib/`,
 nothing imports `app.js` back. Nothing under `lib/` reaches `vendor/` or
-`models/` except through a dynamic `import()` in `gemma.js` — the service
+`models/` except through a dynamic `import()` in `gemma.js`, or from inside
+the worker `whisper.js` starts — the service
 worker precaches the shell, answers `vendor/` and `/models/` cache-first the
 first time a feature actually fetches them, and the startup guard test and
 the service worker tests pin all of that down.
@@ -190,7 +194,10 @@ module header repeats them for anyone reading the source first):
 - **A manifest, not guessing.** IndexedDB (`textarea-sync`) remembers which
   file each note was mirrored to. Deletion is only ever safe for tracked
   files; pointing the app at a folder cannot destroy anything it did not
-  write, and on a fresh manifest nothing is deleted at all.
+  write, and on a fresh manifest nothing is deleted at all. The executor adds
+  a brake on top of the plan (`removalBrake`): a pass that removes too much
+  stops before its first action and asks. What a pass does remove is kept: notes
+  go to the trash, files to `.textarea/sync-removed`.
 - **Newest wins, decided by `planSync`.** The entire decision table — library
   entries vs folder files vs manifest — is a pure function, so the cases where
   a file survives, a note wins or a deletion propagates are unit tests without
@@ -271,6 +278,8 @@ bar, so the bar and the Settings row cannot drift apart.
 
 ## Tasks
 
+A `- ` alone is plain text, not a list item; `expandTaskShortcut()` in
+`features.js` rewrites `-- ` to `- [ ] ` on the space and throws the switch.
 `markdown.js` draws a `- [ ]` after a list marker as a checkbox behind
 `textarea:tasks`, off as it ships — the marker and brackets still in the
 text, so the note in the URL is what was typed — and `tasksIn()` answers
@@ -295,10 +304,14 @@ steps, each fetched only by the step before it:
    model is asked: the note (cut in plain sight past 24,000 characters),
    the chosen tool's instruction, the reader's own sentence, and a rule
    that the answer is the finished text and nothing else.
-2. **Run** fetches `lib/gemma.js`, which reads `models/manifest.json`,
-   pulls the four transport chunks, checks each one's length and SHA-256
-   against the pinned values, and only then imports the engine. A failed
-   attempt forgets itself, so the same button retries.
+2. **Run** fetches `lib/gemma.js`, which reads the picked model's
+   `manifest.json` (Gemma's in `models/`, each MiniCPM's in its own
+   directory there), pulls the transport chunks of every file it lists,
+   checks each one's length and SHA-256 against the pinned values, and only
+   then imports the engine. A failed attempt forgets itself, so the same
+   button retries; picking another model shuts the running engine down
+   before the next one loads. The vision model's image tools send a JPEG,
+   scaled to 896 px at most, in place of the note.
 3. `vendor/wllama/` — llama.cpp as an ES module, its wasm, and the
    compatibility pair for a browser without JSPI or memory64. Upstream's
    constructor points that pair at jsDelivr; `setCompat` points both files
@@ -311,6 +324,21 @@ steps, each fetched only by the step before it:
    drives the panel through a fake engine, the unit tests drive the
    loader over a stubbed fetch, and `npm run check:model` is the one
    place the real chain runs end to end.
+
+Speech to text is the same shape with a thread added. The menu row fetches
+`lib/speech-panel.js`; audio to transcribe fetches `lib/whisper.js`, which
+decodes it to 16 kHz mono with an `AudioContext` and starts
+`lib/whisper-worker.js` with one entry of `MODELS` (small on the CPU, or large
+v3 turbo on WebGPU; another model means another worker, because ONNX Runtime
+is set up once per thread). The worker reads that model's `manifest.json`.
+When the library asks for each ONNX file, the worker verifies and stitches
+its chunks and hands the file over through `env.fetch`, keeping no copy.
+The library's own fetching is pointed at this origin
+and its own caches are switched off, the service worker's being enough. The
+panel's seam is `ensureModel()` answering an engine with a
+`transcribe(samples, {language})` for the model picked; the browser suite drives it with a fake,
+and `npm run check:whisper` runs the real chain. The model's revision is in
+its directory name because `textarea-models` is never versioned.
 
 Nothing is requested from anywhere else. The Content-Security-Policy
 allows WebAssembly to compile (`wasm-unsafe-eval`) and no script from
@@ -328,7 +356,7 @@ preference, and the folder-sync notice/apply callbacks, then asks for the
 folder back. `load()` — after `DOMContentLoaded`, since a module script is
 deferred — claims, decodes and paints the note.
 
-The boot fetches 25 modules — 182 kB to parse and eval, against the 263 kB in
+The boot fetches 25 modules — 191 kB to parse and eval, against the 263 kB in
 21 modules of the single-file shell this replaced — and `tests/perf.js`
 prints that graph, the load timings and the typing cost for anyone who wants
 to re-take them. The panels behind the menu entries
@@ -410,6 +438,11 @@ for the browser suite and the console; nothing in `lib/` reads it.
   the point where only the wasm import remains. The real chain — download,
   verify, compile, answer — is `npm run check:model`, deliberately outside
   the gate because it moves 241 MB and runs inference.
+- *The speech model that ships* — `tests/unit/whisper.test.js` hashes every
+  chunk on disk against the manifest and the stitched whole against the
+  published digest, and checks the panel's language list against the
+  model's own; the browser suite drives the panel through a fake engine.
+  The real chain — file, microphone, offline — is `npm run check:whisper`.
 - *The console stays clean* — `nothing logged an error along the way`, the
   last declaration in the browser suite, judging every test above it.
 - *The sync decision table* — `tests/unit/folder-sync.test.js` against

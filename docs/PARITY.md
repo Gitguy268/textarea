@@ -76,6 +76,24 @@ tests and 105 browser tests are all still here, none deleted or weakened.
 - [x] Model chunks verified before use — U: `gemma.test.js`; `npm run check:model` for the real chain
 - [x] Panel, selection, Replace with one undo — B: the four *writing* tests
 
+## Speech to text
+
+Added to both repositories at once, so it has no upstream to be compared with; the tests are the same in each.
+
+- [x] Chunks verified and stitched, language list, mono mix — U: `whisper.test.js`
+- [x] Panel through a fake engine: language, progress, Cancel, Insert — B: *the speech panel transcribes a file through an injected engine and hands the text back*
+- [x] Menu row, no engine before audio, language remembered — B: *the speech to text row opens its panel without an engine, and the language is remembered*
+- [x] The real chain: file, microphone, offline — `npm run check:whisper`
+
+## Send to a device
+
+Added to both repositories at once, like speech to text; the tests are the same in each.
+
+- [x] Pairing codes, chunked transfer, accept first, byte cap, a webcam-sized symbol jsQR reads — U: `nearby.test.js`
+- [x] Two tabs over WebRTC, paired through the panels, accepted — B: *Send to a device carries a note to another tab over WebRTC, after it accepts* (skipped on macOS, where the firewall drops Playwright's peer traffic; passes under headless Brave)
+- [x] A code that is not one is refused — B: *Receive from a device turns away a code that is not one*
+- [ ] Camera scan on real devices — manual
+
 ## Menu, dialogs, settings
 
 - [x] Menu roles and keys — B: *the arrow keys walk the menu*, *the menu closes when the keyboard tabs away from it*, *the editor and the menu button have accessible names*
@@ -111,4 +129,11 @@ Not parity, but held to the same standard: each has a test.
 - [x] Model download progress and cancel — U: `gemma.test.js`; B: *a model download can be cancelled, and cancelling is not an error*
 - [x] Lazy file readers, export formats and sync engine — B: *startup: panels rarely opened are fetched when their entry is used*, *a reader who never asked for folder sync never loads it, and gets no database for it*
 - [x] A returning tab reopens its unfinished text — B: *a tab that closed mid-keystroke reopens on what was typed, without a second copy*
+- [x] Glass as a material, and on the menu button — B: *the glass row switches the refraction on the floating panels*, *a label on glass still reads 4.5:1 with the note’s own ink behind it*
+- [x] Tags — U: `markdown.test.js`, `filter.test.js`; B: *a tag is drawn in the note, counted in My documents, and filters the list*
+- [x] Pin — U: `library.test.js`; B: *a pinned note leads the list and stays pinned while it is typed in*
+- [x] Archive — U: `filter.test.js`; B: *an archived note leaves the list until the archive is asked for*
+- [x] Activity calendar — U: `filter.test.js`; B: *the calendar lights the days notes were written, and a day filters the list*
+- [x] Quick capture — B: *a jotted note goes into the library without leaving the panel*
+- [x] Timeline and saved filters — U: `prefs.test.js`; B: *the timeline and a saved filter are remembered across a reload*
 - [x] Firefox and WebKit — the whole suite under `BROWSER=firefox` / `BROWSER=webkit`

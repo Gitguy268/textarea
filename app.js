@@ -7,6 +7,7 @@ import {
   applyBacklinksPreference,
   applyStatsPreference,
   applyWritingPreference,
+  expandTaskShortcut,
   openWikiLink,
   statsPanel,
   toggleTask,
@@ -18,11 +19,13 @@ import {
   folderSyncAvailable,
   folderSyncStatus,
   restoreFolder,
+  resolveRemovals,
   setFolderSyncApply,
+  setFolderSyncBrake,
   setFolderSyncNotice,
   syncNow,
 } from './lib/sync.js'
-import {initMenu, initTheme, updateMenuState} from './lib/menu.js'
+import {askAboutRemovals, initMenu, initTheme, updateMenuState} from './lib/menu.js'
 import {
   applySyncedNote,
   article,
@@ -88,6 +91,7 @@ function init() {
   // asks Chrome for it back right away.
   setFolderSyncNotice((message, isError) => notify(message, {error: Boolean(isError), duration: 6000}))
   setFolderSyncApply(applySyncedNote)
+  setFolderSyncBrake(() => askAboutRemovals())
   restoreFolder().then((name) => {
     if (name) notify(`Syncing to ${name}`)
   })
@@ -95,7 +99,8 @@ function init() {
   // The title follows the first keystroke; the URL and the library are
   // rewritten on a pause - and at once when the tab is hidden or closed, so
   // the pause can never cost the last words typed.
-  article.addEventListener('input', () => {
+  article.addEventListener('input', (event) => {
+    expandTaskShortcut(event)
     updateTitle()
     scheduleSave()
   })
@@ -172,6 +177,7 @@ globalThis.textarea = {
     available: folderSyncAvailable,
     connect: connectToDirectory,
     sync: syncNow,
+    resolve: resolveRemovals,
     disconnect: disconnectFolder,
     get status() {
       return folderSyncStatus()

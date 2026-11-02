@@ -1,14 +1,16 @@
 // The shell is precached so the app opens with no network. The vendored
 // libraries are not: pdf.js and its worker are 1.7 MB together, and most visits
 // never open a PDF. They are cached the first time they are actually fetched, so
-// the second PDF opens offline. The QR encoder is the same: a session that only
-// types never asks for it.
+// the second PDF opens offline. The QR encoder and jsQR are the exception and
+// are precached into the vendor cache: Send to a device is meant to work with
+// no network, and a tab outlives the local server it came from, so a QR code
+// fetched on first use would be missing exactly when it is needed.
 //
 // Bump VERSION whenever anything in SHELL changes. The fetch handler answers
 // from the cache before it asks the network, so a returning tab keeps the
 // index.html it installed until the name of the cache changes underneath it.
 
-const VERSION = 'v26'
+const VERSION = 'v35'
 const SHELL_CACHE = `textarea-shell-${VERSION}`
 const VENDOR_CACHE = `textarea-vendor-${VERSION}`
 // Deliberately not derived from VERSION: the model is 241 MB, and a cache
@@ -27,6 +29,7 @@ const SHELL = [
   '/lib/backlinks-panel.js',
   '/lib/backlinks.js',
   '/lib/backup.js',
+  '/lib/board-panel.js',
   '/lib/clipboard.js',
   '/lib/dialog.js',
   '/lib/editor.js',
@@ -35,8 +38,10 @@ const SHELL = [
   '/lib/export.js',
   '/lib/features.js',
   '/lib/file-links.js',
+  '/lib/file-notice.js',
   '/lib/filename.js',
   '/lib/files.js',
+  '/lib/filter.js',
   '/lib/find-panel.js',
   '/lib/find.js',
   '/lib/folder-sync.js',
@@ -49,13 +54,17 @@ const SHELL = [
   '/lib/library.js',
   '/lib/markdown.js',
   '/lib/menu.js',
+  '/lib/nearby-panel.js',
+  '/lib/nearby.js',
   '/lib/note.js',
   '/lib/notify.js',
+  '/lib/organise.js',
   '/lib/open.js',
   '/lib/pdf-layout.js',
   '/lib/pdf.js',
   '/lib/prefs.js',
   '/lib/qr-panel.js',
+  '/lib/qr-scan.js',
   '/lib/qr.js',
   '/lib/read-note.js',
   '/lib/save.js',
@@ -64,26 +73,33 @@ const SHELL = [
   '/lib/share.js',
   '/lib/shortcuts.js',
   '/lib/signals.js',
+  '/lib/speech-panel.js',
   '/lib/stats-panel.js',
   '/lib/stats.js',
+  '/lib/sticky.js',
   '/lib/style.js',
   '/lib/switcher.js',
   '/lib/sync.js',
   '/lib/tasks-panel.js',
   '/lib/theme.js',
+  '/lib/whisper-worker.js',
+  '/lib/whisper.js',
   '/lib/writing-tools.js',
   '/lib/zip.js',
 ]
+
+// Precached into VENDOR_CACHE, which the fetch handler reads first for /vendor/.
+const VENDOR = ['/vendor/qr/qrcode.mjs', '/vendor/qr/qrcode_UTF8.mjs', '/vendor/jsqr/jsQR.js']
 
 const isVendored = (url) => url.pathname.startsWith('/vendor/')
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches
-      .open(SHELL_CACHE)
+    Promise.all([
       // One missing file must not fail the whole install.
-      .then((cache) => Promise.allSettled(SHELL.map((url) => cache.add(url))))
-      .then(() => self.skipWaiting()),
+      caches.open(SHELL_CACHE).then((cache) => Promise.allSettled(SHELL.map((url) => cache.add(url)))),
+      caches.open(VENDOR_CACHE).then((cache) => Promise.allSettled(VENDOR.map((url) => cache.add(url)))),
+    ]).then(() => self.skipWaiting()),
   )
 })
 
