@@ -34,7 +34,7 @@ it had, with the same storage and link formats, plus the changes listed under
 [docs/PARITY.md](docs/PARITY.md) names the test that guards each feature.
 
 <!-- live-links -->
-**Live:** [gitguy268.github.io/textarea](https://gitguy268.github.io/textarea/)
+**Live:** [gitguy268.github.io/textarea](https://gitguy268.github.io/textarea/) · [gitguy268-textarea.vercel.app](https://gitguy268-textarea.vercel.app/)
 <!-- /live-links -->
 
 <!-- run-steps:start -->
