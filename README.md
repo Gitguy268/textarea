@@ -521,7 +521,7 @@ machine. That also means both devices must be on the same network: guest Wi-Fi
 and networks that keep devices apart will time out with a message saying so.
 Each code is the connection offer (or answer), compressed like a note link. A
 code made on `localhost` points the other device at
-[gitguy268-textarea.vercel.app](https://gitguy268.github.io/textarea/),
+[gitguy268-textarea.vercel.app](https://gitguy268-textarea.vercel.app/),
 because a phone can't open this computer's `localhost`. The camera is used only
 while a scan is running. Where the browser has no `BarcodeDetector` (Firefox,
 Safari, Chromium on Windows and Linux) the vendored jsQR decoder reads the
@@ -783,7 +783,7 @@ chromium`; add `firefox webkit` for `test:browsers`). Chromium is the gate;
 under the other two engines the tests of Chromium-only features — folder
 sync, the file pickers, the clipboard permission — are skipped by name. Deploys come from pushes to `main`: [Vercel](https://vercel.com/) is
 connected to this repository through its Git integration, and it publishes the
-static files at [gitguy268-textarea.vercel.app](https://gitguy268.github.io/textarea/)
+static files at [gitguy268-textarea.vercel.app](https://gitguy268-textarea.vercel.app/)
 over HTTPS — there is no build step, and no deploy runs in GitHub Actions.
 GitHub Actions runs the lint, the unit and browser suites, and a link check on
 every pull request.
