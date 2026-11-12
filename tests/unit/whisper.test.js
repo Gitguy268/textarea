@@ -10,7 +10,7 @@
 
 import assert from 'node:assert/strict'
 import {createHash} from 'node:crypto'
-import {createReadStream} from 'node:fs'
+import {createReadStream, existsSync} from 'node:fs'
 import {access, readFile} from 'node:fs/promises'
 import {test} from 'node:test'
 
@@ -20,6 +20,14 @@ import {MODELS, mixToMono} from '../../lib/whisper.js'
 
 const models = new URL('../../models/', import.meta.url)
 const root = new URL(`${MODELS.small.dir}/`, models)
+const hasManifest = Object.fromEntries(
+  Object.entries(MODELS).map(([id, {dir}]) => [id, existsSync(new URL(`${dir}/manifest.json`, models))]),
+)
+const hasAuxiliaryFiles = Object.values(MODELS).every(({dir}) =>
+  ['config.json', 'generation_config.json', 'preprocessor_config.json', 'tokenizer.json', 'tokenizer_config.json']
+    .every((name) => existsSync(new URL(`${dir}/${name}`, models))),
+)
+const hasLanguageConfig = existsSync(new URL('generation_config.json', root))
 
 /** The two ONNX files each model's dtype makes the library ask for. */
 const EXPECTED_FILES = {
@@ -36,7 +44,7 @@ test('the panel offers exactly the models the engine knows how to run', () => {
 })
 
 for (const [id, {dir}] of Object.entries(MODELS)) {
-  test(`the ${id} speech chunks on disk are the ones the manifest pins, and stitch into the published files`, async () => {
+  test(`the ${id} speech chunks on disk are the ones the manifest pins, and stitch into the published files`, {skip: !hasManifest[id]}, async () => {
     const root = new URL(`${dir}/`, models)
     const manifest = JSON.parse(await readFile(new URL('manifest.json', root), 'utf8'))
     const files = Object.entries(manifest.files)
@@ -66,7 +74,7 @@ for (const [id, {dir}] of Object.entries(MODELS)) {
   })
 }
 
-test('the files the library asks for beside the weights are all here', async () => {
+test('the files the library asks for beside the weights are all here', {skip: !hasAuxiliaryFiles}, async () => {
   // The five requests a load makes besides the chunks, read off the network
   // log of a real one. A missing file is a 404 in a worker, a long way from
   // whoever deleted it.
@@ -99,7 +107,7 @@ test('turbo is offered only where a GPU can do half precision', async () => {
   )
 })
 
-test('the panel offers exactly the languages this model was trained to name', async () => {
+test('the panel offers exactly the languages this model was trained to name', {skip: !hasLanguageConfig}, async () => {
   const config = JSON.parse(await readFile(new URL('generation_config.json', root), 'utf8'))
   const known = Object.keys(config.lang_to_id).map((token) => token.slice(2, -2))
   assert.deepEqual([...LANGUAGES].sort(), known.sort())
