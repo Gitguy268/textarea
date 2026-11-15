@@ -10,7 +10,7 @@
 // from the cache before it asks the network, so a returning tab keeps the
 // index.html it installed until the name of the cache changes underneath it.
 
-const VERSION = 'v37'
+const VERSION = 'v38'
 const SHELL_CACHE = `textarea-shell-${VERSION}`
 const VENDOR_CACHE = `textarea-vendor-${VERSION}`
 // Deliberately not derived from VERSION: the model is 241 MB, and a cache
@@ -36,6 +36,8 @@ const SHELL = [
   '/lib/backup.js',
   '/lib/board-panel.js',
   '/lib/clipboard.js',
+  '/lib/customize-panel.js',
+  '/lib/customize.js',
   '/lib/dialog.js',
   '/lib/editor.js',
   '/lib/encryption-panel.js',
@@ -54,6 +56,9 @@ const SHELL = [
   '/lib/formats.js',
   '/lib/front-matter.js',
   '/lib/gemma.js',
+  '/lib/gguf-engine.js',
+  '/lib/gguf-store.js',
+  '/lib/gguf.js',
   '/lib/glass.js',
   '/lib/library-panel.js',
   '/lib/library.js',
@@ -96,6 +101,26 @@ const SHELL = [
 // Precached into VENDOR_CACHE, which the fetch handler reads first for /vendor/.
 const VENDOR = ['/vendor/qr/qrcode.mjs', '/vendor/qr/qrcode_UTF8.mjs', '/vendor/jsqr/jsQR.js'].map(at)
 
+// GitHub Pages sends no headers of our choosing, so the worker adds the two
+// that make the page cross-origin isolated - the opener and embedder
+// policies tests/serve.js and vercel.json send - to every answer it gives
+// for this origin. Isolation is what lets WebAssembly run threads, and a GGUF
+// speech model cannot decode audio without them. A page this worker did not
+// answer (the very first visit) is isolated from the next load on.
+const ISOLATION = {'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp'}
+
+/** The same response with the isolation headers, or itself when it cannot carry them. */
+const isolated = (response) => {
+  if (!response || response.type === 'opaque' || response.type === 'opaqueredirect' || response.status === 0) return response
+  if (response.headers.get('Cross-Origin-Embedder-Policy')) return response
+  const headers = new Headers(response.headers)
+  for (const [name, value] of Object.entries(ISOLATION)) headers.set(name, value)
+  return new Response(response.body, {status: response.status, statusText: response.statusText, headers})
+}
+
+/** Answer a fetch with whatever the promise brings, isolated. */
+const respond = (event, answer) => event.respondWith(Promise.resolve(answer).then(isolated))
+
 const isVendored = (url) => url.pathname.startsWith(at('/vendor/'))
 
 self.addEventListener('install', (event) => {
@@ -128,7 +153,7 @@ self.addEventListener('fetch', (event) => {
   if (isVendored(url)) {
     // Cache first: these files carry a version in their path only by convention,
     // so re-downloading them on every open would waste megabytes.
-    event.respondWith(
+    respond(event, 
       caches.open(VENDOR_CACHE).then(async (cache) => {
         const cached = await cache.match(request)
         if (cached) return cached
@@ -149,7 +174,7 @@ self.addEventListener('fetch', (event) => {
     // offline ones - reads the committed bytes back from here. Nothing in
     // the install event touches this cache; see MODELS_CACHE above for
     // why that cache has no version in its name.
-    event.respondWith(
+    respond(event, 
       caches.open(MODELS_CACHE).then(async (cache) => {
         const cached = await cache.match(request)
         if (cached) return cached
@@ -163,7 +188,7 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  event.respondWith(
+  respond(event, 
     caches.match(request).then((cached) => {
       if (cached) return cached
       return fetch(request)
